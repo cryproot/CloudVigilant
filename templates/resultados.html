@@ -142,7 +142,8 @@
                 <th onclick="sortTable(4)">Versionado de Objetos</th>
                 <th onclick="sortTable(5)">Estado de Ciclo de Vida</th>
                 <th onclick="sortTable(6)">Reglas de Ciclo de Vida</th>
-                <th class="nist-column" onclick="sortTable(7)">NIST 2.0</th> <!-- Nueva columna para NIST 2.0 -->
+                <th onclick="sortTable(7)">Logging</th> <!-- Nueva columna para Logging -->
+                <th class="nist-column" onclick="sortTable(8)">NIST 2.0</th> <!-- Última columna para NIST 2.0 -->
             </tr>
         </thead>
         <tbody>
@@ -189,6 +190,7 @@
                         No configurado
                     {% endif %}
                 </td>
+                <td>{{ "Sí" if resultado.logging_enabled else "No" }}</td> <!-- Datos de Logging -->
                 <td class="{{ 'nist-true' if resultado.nist_state == 'TRUE' else 'nist-fall' }}">{{ resultado.nist_state }}</td>
             </tr>
             {% endfor %}
