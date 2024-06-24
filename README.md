@@ -22,13 +22,13 @@ python3 app.py
 ```
 El comando anterior proporcionará una URL a nivel localhost. Ábrela en tu navegador:
 
-![Localhost](imagen3.png)
+![Localhost1](imagen3.png)
 
 Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
-![Localhost](imagen1.png)
+![Localhost2](imagen1.png)
 
 Haz clic en el botón correspondiente para ejecutar la lógica del programa. Los resultados se mostrarán en pantalla:
 
-![Localhost](imagen2.png)
+![Localhost3](imagen2.png)
 
