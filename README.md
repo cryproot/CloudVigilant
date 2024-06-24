@@ -11,7 +11,10 @@ Este proyecto es una herramienta web diseñada para auditar y explorar los resul
 - **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida, si están configuradas.
 
 ## Certificado eJPTv2
-Aquí presento con orgullo mi certificado eJPTv2, que representa mi compromiso y dedicación en el campo de la ciberseguridad:
-
+Para iniciar la aplicación se debe de ejecutar el siguiente comando
+```python
+python3 app.py
+```
+A continuación, se proporcionará una URL a nivel localhost para abrir en el navegador
 ![Certificación eJPTv2](imagen1.png)
 
