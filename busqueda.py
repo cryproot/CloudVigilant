@@ -86,6 +86,12 @@ def buscar_s3_public_access():
             else:
                 raise
 
+        # Determinar el estado NIST
+        if sse_algorithm == 'None' or versioning_state == 'No habilitado':
+            nist_state = 'FALL'
+        else:
+            nist_state = 'TRUE'
+
         # Almacenar resultados del bucket actual
         resultado['bucket'] = bucket_name
         resultado['is_public'] = is_public_policy
@@ -94,6 +100,7 @@ def buscar_s3_public_access():
         resultado['versioning_state'] = versioning_state
         resultado['lifecycle_state'] = lifecycle_state
         resultado['lifecycle_rules'] = lifecycle_rules
+        resultado['nist_state'] = nist_state  # Agregar estado NIST
 
         resultados.append(resultado)
 
