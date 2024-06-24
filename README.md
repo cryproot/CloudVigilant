@@ -10,7 +10,12 @@ Este proyecto es una herramienta web diseñada para auditar y explorar los resul
 
 - **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida, si están configuradas.
 
-## Certificado eJPTv2
+## Instalación
+```python
+pip install Flask
+pip install boto3
+```
+## Iniciar Aplicación
 Para iniciar la aplicación se debe de ejecutar el siguiente comando
 ```python
 python3 app.py
