@@ -16,5 +16,5 @@ Para iniciar la aplicación se debe de ejecutar el siguiente comando
 python3 app.py
 ```
 A continuación, se proporcionará una URL a nivel localhost para abrir en el navegador
-![Certificación eJPTv2](imagen1.png)
+![Localhost](imagen3.png)
 
