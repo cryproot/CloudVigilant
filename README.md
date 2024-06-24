@@ -33,5 +33,5 @@ Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
 Haz clic en el botón correspondiente para ejecutar la lógica del programa. Los resultados se mostrarán en pantalla:
 
-
+![Localhost23](resultados1.png)
 
