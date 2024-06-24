@@ -26,7 +26,7 @@ El comando anterior proporcionará una URL a nivel localhost. Ábrela en tu nave
 
 Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
-![Localhost2](imagen1.png)
+![Localhost2](resultados.png)
 
 Haz clic en el botón correspondiente para ejecutar la lógica del programa. Los resultados se mostrarán en pantalla:
 
