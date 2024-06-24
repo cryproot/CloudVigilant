@@ -110,6 +110,17 @@
         ul ul {
             margin-left: 20px;
         }
+        .nist-true {
+            background-color: #d4edda; /* Verde claro */
+            color: #155724;
+        }
+        .nist-fall {
+            background-color: #f8d7da; /* Rojo claro */
+            color: #721c24;
+        }
+        .nist-column {
+            width: 150px; /* Ancho mayor para la columna NIST 2.0 */
+        }
     </style>
 </head>
 <body>
@@ -130,7 +141,8 @@
                 <th onclick="sortTable(3)">Algoritmo de Cifrado</th>
                 <th onclick="sortTable(4)">Versionado de Objetos</th>
                 <th onclick="sortTable(5)">Estado de Ciclo de Vida</th>
-                <th onclick="sortTable(6)">Reglas de Ciclo de Vida</th> <!-- Nueva columna para las reglas de ciclo de vida -->
+                <th onclick="sortTable(6)">Reglas de Ciclo de Vida</th>
+                <th class="nist-column" onclick="sortTable(7)">NIST 2.0</th> <!-- Nueva columna para NIST 2.0 -->
             </tr>
         </thead>
         <tbody>
@@ -141,7 +153,7 @@
                 <td>{{ "Sí" if resultado.is_acl_public else "No" }}</td>
                 <td>{{ resultado.sse_algorithm }}</td>
                 <td>{{ resultado.versioning_state }}</td>
-                <td>{{ resultado.lifecycle_state }}</td> <!-- Mostrar estado del ciclo de vida -->
+                <td>{{ resultado.lifecycle_state }}</td>
                 <td>
                     {% if resultado.lifecycle_rules %}
                         <ul>
@@ -177,6 +189,7 @@
                         No configurado
                     {% endif %}
                 </td>
+                <td class="{{ 'nist-true' if resultado.nist_state == 'TRUE' else 'nist-fall' }}">{{ resultado.nist_state }}</td>
             </tr>
             {% endfor %}
         </tbody>
