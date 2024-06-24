@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultados de Búsqueda de S3</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f8f9fa; /* Fondo gris claro para todo el cuerpo */
+            color: #495057;
+        }
+        header {
+            width: 100%;
+            background-color: #343a40; /* Fondo gris oscuro para el header */
+            color: #ffffff; /* Texto blanco para el header */
+            padding: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: start;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra ligera debajo del header */
+        }
+        header img {
+            height: 50px;
+            margin-left: 10px;
+        }
+        header .name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        header .name .cryp {
+            color: #ffc107; /* Color amarillo para 'cryp' */
+        }
+        header .name .root {
+            color: #ffffff; /* Color blanco para 'root' */
+        }
+        .filtro-barra {
+            text-align: center;
+            margin-bottom: 20px;
+            margin-top: 20px;
+        }
+        .filtro-input {
+            padding: 10px;
+            width: 50%;
+            margin-top: 10px;
+            border: 1px solid #ced4da; /* Borde gris claro para el input */
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box; /* Asegura que el padding no incremente el ancho */
+        }
+        h1 {
+            margin-top: 20px; /* Espacio arriba del título */
+            font-size: 28px;
+        }
+        table {
+            width: 90%; /* Ancho ajustado */
+            margin-top: 20px; /* Margen superior para separar del título */
+            border-collapse: collapse;
+            background-color: #ffffff; /* Fondo blanco para la tabla */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra leve */
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px; /* Padding aumentado para mejorar la legibilidad */
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2; /* Fondo gris claro para las celdas de encabezado */
+            font-weight: bold;
+            cursor: pointer; /* Cambia el cursor a pointer para indicar que es clickeable */
+        }
+        .boton {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            outline: none;
+            color: #fff;
+            background-color: #007bff; /* Azul */
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 9px #999; /* Sombra leve */
+            transition: background-color 0.3s ease;
+        }
+        .boton:hover {
+            background-color: #0056b3; /* Azul más oscuro al pasar el ratón */
+        }
+        .boton:active {
+            background-color: #004da8; /* Azul más oscuro al hacer clic */
+            box-shadow: 0 5px #666; /* Sombra más corta */
+            transform: translateY(4px); /* Efecto de levantamiento */
+        }
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style-type: none;
+        }
+        ul li {
+            margin-bottom: 5px;
+        }
+        ul ul {
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="{{ url_for('static', filename='cryproot.png') }}" alt="logo cryproot">
+        <div class="name"><span class="cryp">cryp</span><span class="root">root</span></div>
+    </header>
+    <div class="filtro-barra">
+        <input class="filtro-input" type="text" id="filtro" onkeyup="filterTable()" placeholder="Filtro">
+    </div>
+    <h1>Resultados de Búsqueda de S3</h1>
+    <table id="myTable">
+        <thead>
+            <tr>
+                <th onclick="sortTable(0)">Bucket</th>
+                <th onclick="sortTable(1)">Política Pública</th>
+                <th onclick="sortTable(2)">ACL Público</th>
+                <th onclick="sortTable(3)">Algoritmo de Cifrado</th>
+                <th onclick="sortTable(4)">Versionado de Objetos</th>
+                <th onclick="sortTable(5)">Estado de Ciclo de Vida</th>
+                <th onclick="sortTable(6)">Reglas de Ciclo de Vida</th> <!-- Nueva columna para las reglas de ciclo de vida -->
+            </tr>
+        </thead>
+        <tbody>
+            {% for resultado in resultados %}
+            <tr>
+                <td>{{ resultado.bucket }}</td>
+                <td>{{ "Sí" if resultado.is_public else "No" }}</td>
+                <td>{{ "Sí" if resultado.is_acl_public else "No" }}</td>
+                <td>{{ resultado.sse_algorithm }}</td>
+                <td>{{ resultado.versioning_state }}</td>
+                <td>{{ resultado.lifecycle_state }}</td> <!-- Mostrar estado del ciclo de vida -->
+                <td>
+                    {% if resultado.lifecycle_rules %}
+                        <ul>
+                        {% for rule in resultado.lifecycle_rules %}
+                            <li>ID: {{ rule.ID }}</li>
+                            <li>Status: {{ rule.Status }}</li>
+                            {% if rule.Transitions %}
+                                <li>Transiciones:</li>
+                                <ul>
+                                    {% for transition in rule.Transitions %}
+                                        <li>{{ transition }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                            {% if rule.NoncurrentVersionTransitions %}
+                                <li>Transiciones de versiones no actuales:</li>
+                                <ul>
+                                    {% for transition in rule.NoncurrentVersionTransitions %}
+                                        <li>NoncurrentDays: {{ transition.NoncurrentDays }}</li>
+                                        <li>StorageClass: {{ transition.StorageClass }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                            {% if rule.NoncurrentVersionExpiration %}
+                                <li>Expiración de versiones no actuales:</li>
+                                <ul>
+                                    <li>NoncurrentDays: {{ rule.NoncurrentVersionExpiration.NoncurrentDays }}</li>
+                                </ul>
+                            {% endif %}
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        No configurado
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="/" class="boton">Volver a Inicio</a>
+
+    <script>
+        function filterTable() {
+            let input, filter, table, tr, td, i, txtValue;
+            input = document.getElementById("filtro");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("myTable");
+            tr = table.getElementsByTagName("tr");
+
+            for (i = 0; i < tr.length; i++) {
+                if (tr[i].getElementsByTagName("th").length === 0) {
+                    td = tr[i].getElementsByTagName("td");
+                    let found = false;
+
+                    for (let j = 0; j < td.length; j++) {
+                        let cell = td[j];
+                        if (cell) {
+                            txtValue = cell.textContent || cell.innerText;
+                            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                                found = true;
+                            }
+                        }
+                    }
+
+                    if (found) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
+
+        function sortTable(columnIndex) {
+            let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.getElementById("myTable");
+            switching = true;
+            // Establecer la dirección inicial del ordenamiento como ascendente
+            dir = "asc";
+            
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+                
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    // Obtener los dos elementos a comparar
+                    x = rows[i].getElementsByTagName("td")[columnIndex];
+                    y = rows[i + 1].getElementsByTagName("td")[columnIndex];
+                    
+                    if (dir === "asc") {
+                        if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                            shouldSwitch = true;
+                            break;
+                        }
+                    } else if (dir === "desc") {
+                        if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                            shouldSwitch = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (shouldSwitch) {
+                    // Intercambiar las filas y marcar que se ha realizado un cambio
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount ++;
+                } else {
+                    if (switchcount === 0 && dir === "asc") {
+                        dir = "desc";
+                        switching = true;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

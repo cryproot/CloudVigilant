@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Aplicación</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f8f9fa; /* Fondo gris claro para todo el cuerpo */
+            color: #495057;
+        }
+        header {
+            width: 100%;
+            background-color: #343a40; /* Fondo gris oscuro para el header */
+            color: #ffffff; /* Texto blanco para el header */
+            padding: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: start;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra ligera debajo del header */
+        }
+        header img {
+            height: 50px;
+            margin-left: 10px;
+        }
+        header .name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        header .name .cryp {
+            color: #ffc107; /* Color amarillo para 'cryp' */
+        }
+        header .name .root {
+            color: #ffffff; /* Color blanco para 'root' */
+        }
+        .container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+        h1 {
+            margin: 20px 0; /* Espacio arriba y abajo del título */
+            font-size: 28px;
+            text-align: center;
+        }
+        .boton {
+            background-color: #007bff; /* Azul */
+            color: #ffffff;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 18px;
+            margin-top: 20px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra ligera */
+            outline: none; /* Quita el borde al hacer clic */
+        }
+        .boton:hover {
+            background-color: #0056b3; /* Azul más oscuro al pasar el ratón */
+        }
+        .boton:active {
+            background-color: #004da8; /* Azul más oscuro al hacer clic */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Sombra más leve */
+            transform: translateY(2px); /* Efecto de levantamiento */
+        }
+        /* Puedes agregar estilos para el footer aquí si lo necesitas */
+    </style>
+</head>
+<body>
+    <header>
+        <img src="{{ url_for('static', filename='cryproot.png') }}" alt="logo cryproot">
+        <div class="name"><span class="cryp">cryp</span><span class="root">root</span></div>
+    </header>
+    <div class="container">
+        <h1>¡Bienvenido a Mi Aplicación!</h1>
+        <button class="boton" onclick="location.href='/buscar_s3'">Buscar S3</button>
+    </div>
+    <!-- Aquí puedes agregar tu footer si lo deseas -->
+</body>
+</html>
