@@ -17,4 +17,5 @@ python3 app.py
 ```
 A continuación, se proporcionará una URL a nivel localhost para abrir en el navegador
 ![Localhost](imagen3.png)
+![Localhost](imagen2.png)
 
