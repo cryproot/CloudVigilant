@@ -5,10 +5,13 @@ Este proyecto es una herramienta web diseñada para auditar y explorar los resul
 ## Características
 
 - **Filtrado Avanzado:** Permite filtrar los resultados por nombre de bucket, políticas públicas, ACL públicos, algoritmo de cifrado, estado de versionado de objetos y estado del ciclo de vida.
-  
+
 - **Ordenamiento de Columnas:** Facilita la exploración de datos al permitir ordenar los resultados haciendo clic en los encabezados de columna.
 
 - **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida, si están configuradas.
+
+- **NIST 2.0:** Introduce una evaluación adicional según los estándares de NIST 2.0 para cada bucket, indicando si cumple con requisitos específicos de cifrado y versionado de objetos.
+
 
 ## Instalación
 ```python
@@ -16,11 +19,11 @@ pip install Flask
 pip install boto3
 ```
 ## Iniciar Aplicación
-Para iniciar la aplicación se debe de ejecutar el siguiente comando
+Para iniciar la aplicación, ejecuta el siguiente comando en tu terminal:
 ```python
 python3 app.py
 ```
-El comando anterior proporcionará una URL a nivel localhost. Ábrela en tu navegador:
+Esto iniciará un servidor local y te proporcionará una URL. Abre esta URL en tu navegador web para comenzar a utilizar la aplicación.
 
 ![Localhost1](imagen3.png)
 
