@@ -15,12 +15,12 @@ Para iniciar la aplicación se debe de ejecutar el siguiente comando
 ```python
 python3 app.py
 ```
-A continuación, se proporcionará una URL a nivel localhost para abrir en el navegador
+El comando anterior proporcionará una URL a nivel localhost. Ábrela en tu navegador:
 ![Localhost](imagen3.png)
 
-Una vez colocado la URL en el navegador http://localhost:3000, apareceré la siguiente interfaz
+Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 ![Localhost](imagen1.png)
 
-Hacer click en el botón para hacer funcionar la lógica del programa, los resultados se mostrarán en pantalla
+Haz clic en el botón correspondiente para ejecutar la lógica del programa. Los resultados se mostrarán en pantalla:
 ![Localhost](imagen2.png)
 
