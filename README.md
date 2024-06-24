@@ -22,5 +22,5 @@ Una vez colocado la URL en el navegador http://localhost:3000, apareceré la sig
 ![Localhost](imagen1.png)
 
 Hacer click en el botón para hacer funcionar la lógica del programa, los resultados se mostrarán en pantalla
-![Localhost](imagen3.png)
+![Localhost](imagen2.png)
 
