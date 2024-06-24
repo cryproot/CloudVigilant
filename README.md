@@ -10,11 +10,8 @@ Este proyecto es una herramienta web diseñada para auditar y explorar los resul
 
 - **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida, si están configuradas.
 
-## Capturas de Pantalla
+## Certificado eJPTv2
+Aquí presento con orgullo mi certificado eJPTv2, que representa mi compromiso y dedicación en el campo de la ciberseguridad:
 
-_Inserta aquí algunas capturas de pantalla para mostrar cómo se ve la interfaz y la información mostrada._
-
-## Uso
-
-1. **Clonar este repositorio:**
+![Certificación eJPTv2](imagen1.png)
 
