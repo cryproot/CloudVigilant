@@ -86,6 +86,16 @@ def buscar_s3_public_access():
             else:
                 raise
 
+        # Obtener estado de logging de acceso y modificaciones
+        try:
+            logging_status = s3_client.get_bucket_logging(Bucket=bucket_name)
+            logging_enabled = logging_status.get('LoggingEnabled', None) is not None
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchBucketLogging':
+                logging_enabled = False
+            else:
+                raise
+
         # Determinar el estado NIST
         if sse_algorithm == 'None' or versioning_state == 'No habilitado':
             nist_state = 'FALL'
@@ -101,6 +111,7 @@ def buscar_s3_public_access():
         resultado['lifecycle_state'] = lifecycle_state
         resultado['lifecycle_rules'] = lifecycle_rules
         resultado['nist_state'] = nist_state  # Agregar estado NIST
+        resultado['logging_enabled'] = logging_enabled  # Agregar estado de logging
 
         resultados.append(resultado)
 
