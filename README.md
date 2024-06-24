@@ -21,3 +21,6 @@ A continuación, se proporcionará una URL a nivel localhost para abrir en el na
 Una vez colocado la URL en el navegador http://localhost:3000, apareceré la siguiente interfaz
 ![Localhost](imagen1.png)
 
+Hacer click en el botón para hacer funcionar la lógica del programa, los resultados se mostrarán en pantalla
+![Localhost](imagen3.png)
+
