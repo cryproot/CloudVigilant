@@ -10,7 +10,9 @@ Este proyecto es una herramienta web diseñada para auditar y explorar los resul
 
 - **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida, si están configuradas.
 
-- **NIST 2.0:** Introduce una evaluación adicional según los estándares de NIST 2.0 para cada bucket, indicando si cumple con requisitos específicos de cifrado y versionado de objetos.
+- **Evaluación NIST 2.0:** Introduce una evaluación según los estándares de NIST 2.0 para cada bucket, indicando si cumple con requisitos específicos de cifrado y versionado de objetos.
+
+- **Logging de Acceso y Modificaciones:** Incluye una nueva funcionalidad para verificar el estado de logging de acceso y modificaciones en cada bucket. Esto es crucial para garantizar la trazabilidad y la seguridad de los datos almacenados en S3.
 
 
 ## Instalación
