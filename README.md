@@ -35,7 +35,7 @@ Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
 ![Localhost2](imagen1.png)
 
-Haz clic en el botón correspondiente para ejecutar la lógica del programa. Los resultados se mostrarán en pantalla:
+Haz clic en el botón correspondiente para ejecutar la lógica del programa. Actualmente, al pasar el cursor sobre las columnas, estas se sombrearán de color amarillo. Esto indica que puedes hacer clic para filtrar datos por columnas o utilizar el filtro avanzado por nombre de bucket S3 en la barra superior. Los resultados se mostrarán en pantalla.
 
 ![Localhost23](resultados2.png)
 
