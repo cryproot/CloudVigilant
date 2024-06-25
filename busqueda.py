@@ -24,6 +24,8 @@ def buscar_s3_public_access():
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
                 is_public_policy = False
+            elif e.response['Error']['Code'] == 'AccessDenied':
+                is_public_policy = 'falta de permisos'
             else:
                 raise
 
