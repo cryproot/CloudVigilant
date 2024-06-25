@@ -33,7 +33,7 @@ Esto iniciará un servidor local y te proporcionará una URL. Abre esta URL en t
 
 Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
-![Localhost2](imagen1.png)
+![Localhost2](imagen4.png)
 
 Haz clic en el botón correspondiente para ejecutar la lógica del programa.
 
