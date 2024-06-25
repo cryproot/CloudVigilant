@@ -12,18 +12,18 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: #f8f9fa; /* Fondo gris claro para todo el cuerpo */
+            background-color: #f8f9fa;
             color: #495057;
         }
         header {
             width: 100%;
-            background-color: #343a40; /* Fondo gris oscuro para el header */
-            color: #ffffff; /* Texto blanco para el header */
+            background-color: #343a40;
+            color: #ffffff;
             padding: 10px 0;
             display: flex;
             align-items: center;
             justify-content: start;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra ligera debajo del header */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         header img {
             height: 50px;
@@ -35,10 +35,10 @@
             margin-left: 10px;
         }
         header .name .cryp {
-            color: #ffc107; /* Color amarillo para 'cryp' */
+            color: #ffc107;
         }
         header .name .root {
-            color: #ffffff; /* Color blanco para 'root' */
+            color: #ffffff;
         }
         .filtro-barra {
             text-align: center;
@@ -49,31 +49,36 @@
             padding: 10px;
             width: 50%;
             margin-top: 10px;
-            border: 1px solid #ced4da; /* Borde gris claro para el input */
+            border: 1px solid #ced4da;
             border-radius: 5px;
             font-size: 16px;
-            box-sizing: border-box; /* Asegura que el padding no incremente el ancho */
+            box-sizing: border-box;
         }
         h1 {
-            margin-top: 20px; /* Espacio arriba del título */
+            margin-top: 20px;
             font-size: 28px;
         }
         table {
-            width: 90%; /* Ancho ajustado */
-            margin-top: 20px; /* Margen superior para separar del título */
+            width: 90%;
+            margin-top: 20px;
             border-collapse: collapse;
-            background-color: #ffffff; /* Fondo blanco para la tabla */
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra leve */
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 12px; /* Padding aumentado para mejorar la legibilidad */
+            padding: 12px;
             text-align: left;
         }
         th {
-            background-color: #f2f2f2; /* Fondo gris claro para las celdas de encabezado */
+            background-color: #343a40;
+            color: #ffffff;
             font-weight: bold;
-            cursor: pointer; /* Cambia el cursor a pointer para indicar que es clickeable */
+            cursor: pointer;
+        }
+        th.sortable:hover {
+            background-color: #ffc107;
+            color: #343a40;
         }
         .boton {
             display: inline-block;
@@ -85,19 +90,20 @@
             text-decoration: none;
             outline: none;
             color: #fff;
-            background-color: #007bff; /* Azul */
+            background-color: #343a40;
             border: none;
             border-radius: 15px;
-            box-shadow: 0 9px #999; /* Sombra leve */
+            box-shadow: 0 9px #999;
             transition: background-color 0.3s ease;
         }
         .boton:hover {
-            background-color: #0056b3; /* Azul más oscuro al pasar el ratón */
+            background-color: #ffc107;
+            color: #343a40;
         }
         .boton:active {
-            background-color: #004da8; /* Azul más oscuro al hacer clic */
-            box-shadow: 0 5px #666; /* Sombra más corta */
-            transform: translateY(4px); /* Efecto de levantamiento */
+            background-color: #e0a800;
+            box-shadow: 0 5px #666;
+            transform: translateY(4px);
         }
         ul {
             margin: 0;
@@ -111,15 +117,15 @@
             margin-left: 20px;
         }
         .nist-true {
-            background-color: #d4edda; /* Verde claro */
+            background-color: #d4edda;
             color: #155724;
         }
         .nist-fall {
-            background-color: #f8d7da; /* Rojo claro */
+            background-color: #f8d7da;
             color: #721c24;
         }
         .nist-column {
-            width: 150px; /* Ancho mayor para la columna NIST 2.0 */
+            width: 150px;
         }
     </style>
 </head>
@@ -135,15 +141,15 @@
     <table id="myTable">
         <thead>
             <tr>
-                <th onclick="sortTable(0)">Bucket</th>
-                <th onclick="sortTable(1)">Política Pública</th>
-                <th onclick="sortTable(2)">ACL Público</th>
-                <th onclick="sortTable(3)">Algoritmo de Cifrado</th>
-                <th onclick="sortTable(4)">Versionado de Objetos</th>
-                <th onclick="sortTable(5)">Estado de Ciclo de Vida</th>
-                <th onclick="sortTable(6)">Reglas de Ciclo de Vida</th>
-                <th onclick="sortTable(7)">Logging</th> <!-- Nueva columna para Logging -->
-                <th class="nist-column" onclick="sortTable(8)">NIST 2.0</th> <!-- Última columna para NIST 2.0 -->
+                <th class="sortable" onclick="sortTable(0)">Bucket</th>
+                <th class="sortable" onclick="sortTable(1)">Política Pública</th>
+                <th class="sortable" onclick="sortTable(2)">ACL Público</th>
+                <th class="sortable" onclick="sortTable(3)">Algoritmo de Cifrado</th>
+                <th class="sortable" onclick="sortTable(4)">Versionado de Objetos</th>
+                <th class="sortable" onclick="sortTable(5)">Estado de Ciclo de Vida</th>
+                <th class="sortable" onclick="sortTable(6)">Reglas de Ciclo de Vida</th>
+                <th class="sortable" onclick="sortTable(7)">Log Acceso y Modificaciones</th>
+                <th class="nist-column sortable" onclick="sortTable(8)">NIST 2.0</th>
             </tr>
         </thead>
         <tbody>
@@ -190,7 +196,7 @@
                         No configurado
                     {% endif %}
                 </td>
-                <td>{{ "Sí" if resultado.logging_enabled else "No" }}</td> <!-- Datos de Logging -->
+                <td>{{ "Sí" if resultado.logging_enabled else "No" }}</td>
                 <td class="{{ 'nist-true' if resultado.nist_state == 'TRUE' else 'nist-fall' }}">{{ resultado.nist_state }}</td>
             </tr>
             {% endfor %}
@@ -234,19 +240,17 @@
             let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
             table = document.getElementById("myTable");
             switching = true;
-            // Establecer la dirección inicial del ordenamiento como ascendente
             dir = "asc";
-            
+
             while (switching) {
                 switching = false;
                 rows = table.rows;
-                
+
                 for (i = 1; i < (rows.length - 1); i++) {
                     shouldSwitch = false;
-                    // Obtener los dos elementos a comparar
                     x = rows[i].getElementsByTagName("td")[columnIndex];
                     y = rows[i + 1].getElementsByTagName("td")[columnIndex];
-                    
+
                     if (dir === "asc") {
                         if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
                             shouldSwitch = true;
@@ -259,12 +263,11 @@
                         }
                     }
                 }
-                
+
                 if (shouldSwitch) {
-                    // Intercambiar las filas y marcar que se ha realizado un cambio
                     rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
                     switching = true;
-                    switchcount ++;
+                    switchcount++;
                 } else {
                     if (switchcount === 0 && dir === "asc") {
                         dir = "desc";
