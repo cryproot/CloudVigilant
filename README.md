@@ -1,18 +1,14 @@
-# S3 Audit Results Explorer
+# CloudVigilant
 
-Este proyecto es una herramienta web diseñada para auditar y explorar los resultados de los buckets de Amazon S3. Permite a los usuarios filtrar, ordenar y visualizar información detallada sobre los buckets y sus configuraciones.
+This project is a web tool designed to audit and explore the results of Amazon cloud services such as S3 and EC2, among others. It provides users with the ability to filter, sort, and visualize detailed information efficiently.
 
 ## Características
 
-- **Filtrado Avanzado:** Permite filtrar los resultados por nombre de bucket, políticas públicas, ACL públicos, algoritmo de cifrado, estado de versionado de objetos y estado del ciclo de vida.
+- **Column Sorting:** Facilitates data exploration by allowing results to be sorted by clicking on column headers.
 
-- **Ordenamiento de Columnas:** Facilita la exploración de datos al permitir ordenar los resultados haciendo clic en los encabezados de columna.
+- **Detailed Visualization:** Displays detailed information about each bucket, including lifecycle rules if configured.
 
-- **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida, si están configuradas.
-
-- **Evaluación NIST 2.0:** Introduce una evaluación según los estándares de NIST 2.0 para cada bucket, indicando si cumple con requisitos específicos de cifrado y versionado de objetos.
-
-- **Logging de Acceso y Modificaciones:** Incluye una nueva funcionalidad para verificar el estado de logging de acceso y modificaciones en cada bucket. Esto es crucial para garantizar la trazabilidad y la seguridad de los datos almacenados en S3.
+- **NIST 2.0 Assessment:** Introduces an assessment according to NIST 2.0 standards for each service, indicating whether it meets specific encryption and object versioning requirements and other things mains.
 
 
 ## Instalación
