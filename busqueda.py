@@ -28,7 +28,7 @@ def buscar_s3_public_access():
                 is_public_policy = 'falta de permisos'
             else:
                 is_public_policy = f'Error: {e.response["Error"]["Code"]}'
-        
+
         # Obtener estado de la configuración ACL del bucket
         try:
             acl_grants = s3_client.get_bucket_acl(Bucket=bucket_name)
@@ -42,7 +42,7 @@ def buscar_s3_public_access():
                 is_acl_public = 'falta de permisos'
             else:
                 is_acl_public = f'Error: {e.response["Error"]["Code"]}'
-        
+
         # Obtener configuración de cifrado de datos en reposo
         try:
             encryption_config = s3_client.get_bucket_encryption(Bucket=bucket_name)
@@ -59,22 +59,30 @@ def buscar_s3_public_access():
                 sse_algorithm = 'falta de permisos'
             else:
                 sse_algorithm = f'Error: {e.response["Error"]["Code"]}'
-        
-        # Obtener estado del versionado de objetos del bucket
+
+        # Obtener estado del versionado de objetos del bucket y eliminación MFA
         try:
             versioning_status = s3_client.get_bucket_versioning(Bucket=bucket_name)
             if 'Status' in versioning_status:
                 versioning_state = versioning_status['Status']
             else:
                 versioning_state = 'No habilitado'
+
+            if 'MFADelete' in versioning_status:
+                mfa_delete = versioning_status['MFADelete']
+            else:
+                mfa_delete = 'No habilitado'
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchBucket':
                 versioning_state = 'No habilitado'
+                mfa_delete = 'No habilitado'
             elif e.response['Error']['Code'] == 'AccessDenied':
                 versioning_state = 'falta de permisos'
+                mfa_delete = 'falta de permisos'
             else:
                 versioning_state = f'Error: {e.response["Error"]["Code"]}'
-        
+                mfa_delete = f'Error: {e.response["Error"]["Code"]}'
+
         # Obtener configuración de ciclo de vida del bucket
         try:
             lifecycle_config = s3_client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
@@ -95,7 +103,7 @@ def buscar_s3_public_access():
             else:
                 lifecycle_state = f'Error: {e.response["Error"]["Code"]}'
                 lifecycle_rules = []
-        
+
         # Obtener estado de logging de acceso y modificaciones
         try:
             logging_status = s3_client.get_bucket_logging(Bucket=bucket_name)
@@ -107,7 +115,7 @@ def buscar_s3_public_access():
                 logging_enabled = 'falta de permisos'
             else:
                 logging_enabled = f'Error: {e.response["Error"]["Code"]}'
-        
+
         # Determinar el estado NIST
         if sse_algorithm == 'None' or versioning_state == 'No habilitado':
             nist_state = 'FALL'
@@ -120,6 +128,7 @@ def buscar_s3_public_access():
         resultado['is_acl_public'] = is_acl_public
         resultado['sse_algorithm'] = sse_algorithm
         resultado['versioning_state'] = versioning_state
+        resultado['mfa_delete'] = mfa_delete  # Agregar estado MFA Delete
         resultado['lifecycle_state'] = lifecycle_state
         resultado['lifecycle_rules'] = lifecycle_rules
         resultado['nist_state'] = nist_state  # Agregar estado NIST
