@@ -55,6 +55,12 @@
             text-align: center;
             color: #343a40; /* Color gris oscuro para el título */
         }
+        .botones {
+            display: flex;
+            justify-content: center;
+            gap: 20px; /* Espacio entre los botones */
+            margin-top: 20px;
+        }
         .boton {
             background-color: #ffc107; /* Amarillo */
             color: #343a40; /* Color gris oscuro para el texto del botón */
@@ -63,13 +69,13 @@
             text-decoration: none;
             display: inline-block;
             font-size: 18px;
-            margin-top: 20px;
             cursor: pointer;
             border: none;
             border-radius: 5px;
             transition: background-color 0.3s ease;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra ligera */
             outline: none; /* Quita el borde al hacer clic */
+            width: 200px; /* Ancho fijo para ambos botones */
         }
         .boton:hover {
             background-color: #ffa000; /* Amarillo más oscuro al pasar el ratón */
@@ -112,8 +118,11 @@
         <div class="name"><span class="cryp">cryp</span><span class="root">root</span></div>
     </header>
     <div class="container">
-        <h1>¡Auditoría de Amazon S3!</h1>
-        <button class="boton" onclick="buscarS3()">Auditar S3</button>
+        <h1>¡Auditoría de Amazon!</h1>
+        <div class="botones">
+            <button class="boton" onclick="buscarS3()">Auditar S3</button>
+            <button class="boton" onclick="buscarEC2()">Auditar EC2</button>
+        </div>
     </div>
     <div class="overlay" id="overlay">
         <div class="loader"></div>
@@ -126,6 +135,16 @@
             // Redirigir después de un breve retraso (simulado aquí con setTimeout)
             setTimeout(function() {
                 window.location.href = '/buscar_s3';
+            }, 1000); // Tiempo de espera de 1 segundo (1000 milisegundos)
+        }
+
+        function buscarEC2() {
+            var overlay = document.getElementById("overlay");
+            overlay.style.display = "flex"; // Mostrar el overlay con indicador de carga
+
+            // Redirigir después de un breve retraso (simulado aquí con setTimeout)
+            setTimeout(function() {
+                window.location.href = '/buscar_ec2';
             }, 1000); // Tiempo de espera de 1 segundo (1000 milisegundos)
         }
     </script>
