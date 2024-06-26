@@ -146,10 +146,11 @@
                 <th class="sortable" onclick="sortTable(2)">ACL Público</th>
                 <th class="sortable" onclick="sortTable(3)">Algoritmo de Cifrado</th>
                 <th class="sortable" onclick="sortTable(4)">Versionado de Objetos</th>
-                <th class="sortable" onclick="sortTable(5)">Estado de Ciclo de Vida</th>
-                <th class="sortable" onclick="sortTable(6)">Reglas de Ciclo de Vida</th>
-                <th class="sortable" onclick="sortTable(7)">Log Acceso y Modificaciones</th>
-                <th class="nist-column sortable" onclick="sortTable(8)">NIST 2.0</th>
+                <th class="sortable" onclick="sortTable(5)">Eliminación MFA</th> <!-- Nueva columna -->
+                <th class="sortable" onclick="sortTable(6)">Estado de Ciclo de Vida</th>
+                <th class="sortable" onclick="sortTable(7)">Reglas de Ciclo de Vida</th>
+                <th class="sortable" onclick="sortTable(8)">Log Acceso y Modificaciones</th>
+                <th class="nist-column sortable" onclick="sortTable(9)">NIST 2.0</th>
             </tr>
         </thead>
         <tbody>
@@ -160,6 +161,7 @@
                 <td>{{ "Sí" if resultado.is_acl_public else "No" }}</td>
                 <td>{{ resultado.sse_algorithm }}</td>
                 <td>{{ resultado.versioning_state }}</td>
+                <td>{{ resultado.mfa_delete }}</td> <!-- Nueva fila -->
                 <td>{{ resultado.lifecycle_state }}</td>
                 <td>
                     {% if resultado.lifecycle_rules %}
