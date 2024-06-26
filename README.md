@@ -29,11 +29,11 @@ Esto iniciará un servidor local y te proporcionará una URL. Abre esta URL en t
 
 Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
-![Localhost2](imagen4.png)
+![Localhost2](resultados2.1.png)
 
 Haz clic en el botón correspondiente para ejecutar la lógica del programa.
 
-![Localhost2](resultados2.1.png)
+![Localhost2](resultados2.2.png)
 
 Actualmente, al pasar el cursor sobre las columnas, estas se sombrearán de color amarillo. Esto indica que puedes hacer clic para filtrar datos por columnas o utilizar el filtro avanzado por nombre de bucket S3 en la barra superior. Los resultados se mostrarán en pantalla.
 
