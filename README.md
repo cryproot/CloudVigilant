@@ -1,14 +1,14 @@
 # CloudVigilant
 
-This project is a web tool designed to audit and explore the results of Amazon cloud services such as S3 and EC2, among others. It provides users with the ability to filter, sort, and visualize detailed information efficiently.
+Este proyecto es una herramienta web avanzada diseñada para auditar y explorar los resultados de diversos servicios en la nube de Amazon, como S3, EC2, y cuentas IAM, entre otros. Su objetivo es proporcionar a los usuarios una plataforma intuitiva y potente para gestionar y analizar sus recursos en la nube de manera eficiente.
 
 ## Características
 
-- **Column Sorting:** Facilitates data exploration by allowing results to be sorted by clicking on column headers.
+- **Ordenación de Columnas:** Facilita la exploración de datos permitiendo ordenar los resultados al hacer clic en los encabezados de las columnas.
 
-- **Detailed Visualization:** Displays detailed information about each bucket, including lifecycle rules if configured.
-
-- **NIST 2.0 Assessment:** Introduces an assessment according to NIST 2.0 standards for each service, indicating whether it meets specific encryption and object versioning requirements and other things mains.
+- **Visualización Detallada:** Muestra información detallada sobre cada bucket, incluyendo reglas de ciclo de vida si están configuradas.
+  
+- **Evaluación NIST 2.0:** Introduce una evaluación conforme a los estándares NIST 2.0 para cada servicio, indicando si cumple con requisitos específicos de cifrado, versionado de objetos y otros criterios clave de seguridad.
 
 
 ## Instalación
