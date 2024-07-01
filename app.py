@@ -1,6 +1,7 @@
 from flask import Flask, render_template
 from busqueda import buscar_s3_public_access  # Importar función de busqueda.py para S3
 from busqueda2 import buscar_ec2_configuraciones  # Importar función de busqueda2.py para EC2
+from busqueda3 import buscar_iam_usuarios  # Importar función de busqueda3.py para IAM
 import json
 
 app = Flask(__name__)
@@ -28,6 +29,13 @@ def buscar_ec2():
     resultados_json = buscar_ec2_configuraciones()
     resultados = json.loads(resultados_json)
     return render_template('resultadosec2.html', resultados=resultados)
+
+# Ruta para ejecutar la búsqueda de IAM y mostrar los resultados
+@app.route('/buscar_iam')
+def buscar_iam():
+    resultados_json = buscar_iam_usuarios()
+    resultados = json.loads(resultados_json)
+    return render_template('resultadosiam.html', resultados=resultados)
 
 if __name__ == '__main__':
     app.run(host='localhost', port=3000, debug=True)
