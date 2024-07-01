@@ -27,7 +27,7 @@ Esto iniciará un servidor local y te proporcionará una URL. Abre esta URL en t
 
 ![Localhost1](imagen3.png)
 
-Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
+Veamos un ejemplo auditando los buckets s3 de aws. Al abrir la URL http://localhost:3000, verás la siguiente interfaz:
 
 ![Localhost2](Imagenes/figura1.png)
 
