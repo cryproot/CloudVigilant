@@ -126,6 +126,18 @@ def buscar_ec2_configuraciones():
 
             for pair in volume_snapshot_pairs:
                 for snapshot_pt2 in pair['SnapshotIds_pt2']:
+                    # Determine NIST 2.0 compliance
+                    nist2_compliant = True
+                    if imdsv2_status == 'IMDSv2 optional':
+                        nist2_compliant = False
+                    if not pair['Encrypted']:
+                        nist2_compliant = False
+                    if not snapshot_pt2['Encrypted']:
+                        nist2_compliant = False
+
+                    # Assign True or Fall based on NIST 2.0 compliance
+                    nist2_status = 'True' if nist2_compliant else 'Fall'
+
                     resultados.append({
                         'instance_id': instance_id,
                         'instance_name': instance_name,
@@ -138,7 +150,8 @@ def buscar_ec2_configuraciones():
                         'snapshot_id_pt1': pair['SnapshotIds_pt1'][0] if pair['SnapshotIds_pt1'] else 'N/A',
                         'snapshot_id_pt2': snapshot_pt2['SnapshotId'],
                         'snapshot_id_pt2_encrypted': snapshot_pt2['Encrypted'],
-                        'encrypted': pair['Encrypted']
+                        'encrypted': pair['Encrypted'],
+                        'nist2_status': nist2_status
                     })
 
-    return json.dumps(resultados)
+    return json.dumps(resultados, default=str)
