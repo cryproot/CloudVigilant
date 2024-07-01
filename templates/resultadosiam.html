@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultados de Auditoría de Usuarios IAM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f8f9fa;
+            color: #495057;
+        }
+        header {
+            width: 100%;
+            background-color: #343a40;
+            color: #ffffff;
+            padding: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: start;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        header img {
+            height: 50px;
+            margin-left: 10px;
+        }
+        header .name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        header .name .cryp {
+            color: #ffc107;
+        }
+        header .name .root {
+            color: #ffffff;
+        }
+        .filtro-barra {
+            text-align: center;
+            margin-bottom: 20px;
+            margin-top: 20px;
+        }
+        .filtro-input {
+            padding: 10px;
+            width: 50%;
+            margin-top: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        h1 {
+            margin-top: 20px;
+            font-size: 28px;
+        }
+        table {
+            width: 90%;
+            margin-top: 20px;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #343a40;
+            color: #ffffff;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        th.sortable:hover {
+            background-color: #ffc107;
+            color: #343a40;
+        }
+        .boton {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            outline: none;
+            color: #fff;
+            background-color: #343a40;
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 9px #999;
+            transition: background-color 0.3s ease;
+        }
+        .boton:hover {
+            background-color: #ffc107;
+            color: #343a40;
+        }
+        .boton:active {
+            background-color: #e0a800;
+            box-shadow: 0 5px #666;
+            transform: translateY(4px);
+        }
+        .nist-true {
+            background-color: #28a745;
+            color: #fff;
+        }
+        .nist-fail {
+            background-color: #dc3545;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="{{ url_for('static', filename='cryproot.png') }}" alt="logo cryproot">
+        <div class="name"><span class="cryp">cryp</span><span class="root">root</span></div>
+    </header>
+    <div class="filtro-barra">
+        <input class="filtro-input" type="text" id="filtro" onkeyup="filterTable()" placeholder="Filtro">
+    </div>
+    <h1>Resultados de Auditoría de Usuarios IAM</h1>
+    <table id="myTable">
+        <thead>
+            <tr>
+                <th class="sortable" onclick="sortTable(0)">Nombre de Usuario</th>
+                <th class="sortable" onclick="sortTable(1)">Administrador</th>
+                <th class="sortable" onclick="sortTable(2)">MFA Habilitado</th>
+                <th class="sortable" onclick="sortTable(3)">Acceso a la Consola</th>
+                <th class="sortable" onclick="sortTable(4)">Última Fecha de Acceso</th>
+                <th class="sortable" onclick="sortTable(5)">Access Key ID</th>
+                <th class="sortable" onclick="sortTable(6)">Estado de Clave</th>
+                <th class="sortable" onclick="sortTable(7)">NIST 2.0</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for resultado in resultados %}
+            <tr>
+                <td>{{ resultado.user_name }}</td>
+                <td>{{ 'Sí' if resultado.is_admin else 'No' }}</td>
+                <td>{{ 'Sí' if resultado.mfa_enabled else 'No' }}</td>
+                <td>{{ 'Sí' if resultado.has_console_access else 'No' }}</td>
+                <td>{{ resultado.last_used }}</td>
+                <td>
+                    {% if resultado.access_keys %}
+                        {% for key in resultado.access_keys %}
+                            {{ key.AccessKeyId }}<br>
+                        {% endfor %}
+                    {% else %}
+                        No se encontraron claves de acceso
+                    {% endif %}
+                </td>
+                <td>
+                    {% if resultado.access_keys %}
+                        {% for key in resultado.access_keys %}
+                            {{ key.Status }}<br>
+                        {% endfor %}
+                    {% else %}
+                        No se encontraron claves de acceso
+                    {% endif %}
+                </td>
+                <td class="{{ 'nist-true' if resultado.nist_compliance == 'True' else 'nist-fail' }}">
+                    {{ resultado.nist_compliance }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="/" class="boton">Volver a Inicio</a>
+
+    <script>
+        function filterTable() {
+            let input, filter, table, tr, td, i, txtValue;
+            input = document.getElementById("filtro");
+            filter = input.value.toUpperCase();
+            table = document.getElementById("myTable");
+            tr = table.getElementsByTagName("tr");
+
+            for (i = 0; i < tr.length; i++) {
+                if (tr[i].getElementsByTagName("th").length === 0) {
+                    td = tr[i].getElementsByTagName("td");
+                    let found = false;
+
+                    for (let j = 0; j < td.length; j++) {
+                        let cell = td[j];
+                        if (cell) {
+                            txtValue = cell.textContent || cell.innerText;
+                            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                                found = true;
+                            }
+                        }
+                    }
+
+                    if (found) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
+
+        function sortTable(columnIndex) {
+            let table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.getElementById("myTable");
+            switching = true;
+            dir = "asc";
+
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    x = rows[i].getElementsByTagName("td")[columnIndex];
+                    y = rows[i + 1].getElementsByTagName("td")[columnIndex];
+
+                    if (dir === "asc") {
+                        if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                            shouldSwitch = true;
+                            break;
+                        }
+                    } else if (dir === "desc") {
+                        if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                            shouldSwitch = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (shouldSwitch) {
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount++;
+                } else {
+                    if (switchcount === 0 && dir === "asc") {
+                        dir = "desc";
+                        switching = true;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
