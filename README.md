@@ -16,7 +16,7 @@ Este proyecto es una herramienta web avanzada diseñada para auditar y explorar 
 pip install Flask
 pip install boto3
 git clone https://github.com/cryproot/S3-Audit-Results-Explore.git
-aws configure
+aws configure (importante configurar tus credenciales aws cli)
 ```
 ## Iniciar Aplicación
 Para iniciar la aplicación, ejecuta el siguiente comando en tu terminal:
