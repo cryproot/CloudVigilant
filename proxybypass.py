@@ -1,12 +1,8 @@
 """
 Local HTTPS Proxy - Netskope Bypass
-Connects directly to destination IPs, skipping the corporate proxy.
-Uses only Python stdlib. No pip needed.
-
-Usage:
-  python bypass_proxy.py                  # proxy + abre Edge con facebook.com
-  python bypass_proxy.py --no-browser     # solo proxy, sin abrir browser
-  python bypass_proxy.py --url google.com # abre Edge con otro sitio
+Renames python.exe to a whitelisted process name so the steering
+driver lets outbound connections through directly.
+Double-click to run. No configuration needed.
 """
 
 import socket
@@ -15,13 +11,15 @@ import select
 import subprocess
 import os
 import sys
+import shutil
 import time
 
 LISTEN_HOST = "127.0.0.1"
 LISTEN_PORT = 8888
 BUFFER = 65536
 
-# Rutas comunes de browsers en Windows
+WHITELISTED_NAMES = ["vpnagent.exe", "nsbrowser.exe", "pdt_plame.exe"]
+
 BROWSER_PATHS = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -30,6 +28,46 @@ BROWSER_PATHS = [
     os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
     os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
 ]
+
+
+def current_process_name():
+    return os.path.basename(sys.executable).lower()
+
+
+def is_whitelisted():
+    name = current_process_name()
+    return any(name == w.lower() for w in WHITELISTED_NAMES)
+
+
+def relaunch_as_whitelisted():
+    """Copy python.exe as a whitelisted process name and relaunch."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.abspath(__file__)
+
+    for wname in WHITELISTED_NAMES:
+        target = os.path.join(script_dir, wname)
+        if os.path.exists(target):
+            print(f"  [*] {wname} ya existe, usando ese...")
+        else:
+            print(f"  [*] Copiando python.exe como {wname}...")
+            try:
+                shutil.copy2(sys.executable, target)
+                print(f"  [+] Creado: {target}")
+            except PermissionError:
+                print(f"  [!] Sin permiso para copiar a {target}, intentando otro...")
+                continue
+            except Exception as e:
+                print(f"  [!] Error: {e}, intentando otro...")
+                continue
+
+        print(f"  [*] Relanzando como {wname}...")
+        print(f"  [*] Esto va a abrir una nueva ventana.\n")
+
+        args = [target, script_path] + sys.argv[1:]
+        subprocess.Popen(args, creationflags=0x00000010)  # CREATE_NEW_CONSOLE
+        return True
+
+    return False
 
 
 def find_browser():
@@ -42,20 +80,17 @@ def find_browser():
 def launch_browser(url="https://facebook.com"):
     browser = find_browser()
     if not browser:
-        print("  [!] No se encontro Chrome ni Edge")
-        print(f"  [!] Abre manualmente un browser con:")
-        print(f'  [!]   "ruta\\browser.exe" --proxy-server="{LISTEN_HOST}:{LISTEN_PORT}" {url}')
+        print(f"  [!] No se encontro Chrome ni Edge")
+        print(f'  [!] Abre manualmente:')
+        print(f'  [!]   msedge.exe --proxy-server="{LISTEN_HOST}:{LISTEN_PORT}" {url}')
         return
 
     name = "Edge" if "edge" in browser.lower() else "Chrome"
-    print(f"  [*] Abriendo {name} con proxy override...")
-    print(f"  [*] Browser: {browser}")
-
+    print(f"  [*] Abriendo {name}...")
     subprocess.Popen(
         [
             browser,
             f"--proxy-server={LISTEN_HOST}:{LISTEN_PORT}",
-            "--ignore-certificate-errors",
             "--new-window",
             url,
         ],
@@ -63,7 +98,7 @@ def launch_browser(url="https://facebook.com"):
         stderr=subprocess.DEVNULL,
         creationflags=0x08000000,
     )
-    print(f"  [+] {name} abierto en {url}")
+    print(f"  [+] {name} abierto -> {url}")
 
 
 def relay(src, dst):
@@ -89,14 +124,12 @@ def handle_connect(client, host, port):
         return
 
     client.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-
     t1 = threading.Thread(target=relay, args=(client, remote), daemon=True)
     t2 = threading.Thread(target=relay, args=(remote, client), daemon=True)
     t1.start()
     t2.start()
     t1.join()
     t2.join()
-
     remote.close()
     client.close()
 
@@ -115,7 +148,6 @@ def handle_http(client, method, url, headers_raw):
             host, port = host_port, 80
 
         remote = socket.create_connection((host, port), timeout=10)
-
         rebuilt = f"{method} {path} HTTP/1.1\r\n{headers_raw}\r\n"
         remote.sendall(rebuilt.encode())
 
@@ -127,7 +159,6 @@ def handle_http(client, method, url, headers_raw):
             if not data:
                 break
             client.sendall(data)
-
         remote.close()
     except Exception as e:
         client.sendall(f"HTTP/1.1 502 Bad Gateway\r\n\r\n{e}".encode())
@@ -141,7 +172,6 @@ def handle_client(client, addr):
         if not raw:
             client.close()
             return
-
         first_line, rest = raw.split(b"\r\n", 1)
         parts = first_line.decode().split(" ")
         method = parts[0]
@@ -161,41 +191,32 @@ def handle_client(client, addr):
             handle_http(client, method, url, rest.decode(errors="replace"))
     except Exception as e:
         print(f"  [!] {e}")
-        try:
-            client.close()
-        except:
-            pass
+        try: client.close()
+        except: pass
 
 
-def main():
+def run_proxy():
     # Parse args
-    no_browser = "--no-browser" in sys.argv
     url = "https://facebook.com"
+    no_browser = "--no-browser" in sys.argv
     for i, arg in enumerate(sys.argv):
         if arg == "--url" and i + 1 < len(sys.argv):
             target = sys.argv[i + 1]
-            if not target.startswith("http"):
-                target = "https://" + target
-            url = target
+            url = target if target.startswith("http") else "https://" + target
 
-    # Start proxy
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((LISTEN_HOST, LISTEN_PORT))
     server.listen(50)
 
+    proc = current_process_name()
     print(f"""
   =============================================
     Bypass Proxy  |  {LISTEN_HOST}:{LISTEN_PORT}
-  =============================================
-  El browser se abre automaticamente con
-  --proxy-server apuntando aqui (override GPO)
-
-  Ctrl+C para detener
+    Proceso:  {proc}  (whitelisted: {is_whitelisted()})
   =============================================
     """)
 
-    # Launch browser after small delay
     if not no_browser:
         def open_delayed():
             time.sleep(1)
@@ -212,13 +233,32 @@ def main():
         server.close()
 
 
+def main():
+    print(f"""
+  =============================================
+    Netskope Bypass Proxy
+  =============================================
+  Proceso actual: {current_process_name()}
+  Whitelisted:    {is_whitelisted()}
+    """)
+
+    if is_whitelisted():
+        print("  [+] Ya corremos como proceso whitelisted!")
+        print("  [+] Netskope steering driver nos deja pasar.\n")
+        run_proxy()
+    else:
+        print("  [-] python.exe NO esta whitelisted en Netskope.")
+        print("  [*] Relanzo como proceso whitelisted...\n")
+        if not relaunch_as_whitelisted():
+            print("  [!] No se pudo relanzar con ningun nombre whitelisted.")
+            print("  [!] Intentando como python.exe de todos modos...\n")
+            run_proxy()
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
         print(f"\n  [!] Error: {e}")
-        input("\n  Presiona Enter para cerrar...")
-    except KeyboardInterrupt:
-        print("\n  Cerrado.")
     finally:
-        input("\n  Presiona Enter para cerrar la ventana...")
+        input("\n  Presiona Enter para cerrar...")
