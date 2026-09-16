@@ -1,0 +1,283 @@
+"""
+ps_shell.py — Shell interactivo via MSBuild + PowerShell Runspace
+Evaluacion de seguridad autorizada.
+
+Tecnica: MSBuild.exe + C# inline task -> PS Runspace (sin powershell.exe)
+"""
+
+import os
+import sys
+import subprocess
+import tempfile
+import time
+import ctypes
+from pathlib import Path
+
+# ── ANSI colors ────────────────────────────────────────────────────────────────
+RST   = "\033[0m"
+BOLD  = "\033[1m"
+DIM   = "\033[2m"
+RED   = "\033[91m"
+YELLOW= "\033[93m"
+CYAN  = "\033[96m"
+WHITE = "\033[97m"
+GRAY  = "\033[90m"
+BLUE  = "\033[94m"
+
+def enable_ansi():
+    try:
+        k32    = ctypes.windll.kernel32
+        handle = k32.GetStdHandle(-11)
+        mode   = ctypes.c_ulong()
+        k32.GetConsoleMode(handle, ctypes.byref(mode))
+        k32.SetConsoleMode(handle, mode.value | 0x0004)
+    except Exception:
+        pass
+
+def c(color, text):
+    return f"{color}{text}{RST}"
+
+# ── MSBuild ────────────────────────────────────────────────────────────────────
+MSBUILD_PATHS = [
+    r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
+    r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
+    r"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+    r"C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+]
+
+def find_msbuild():
+    return next((p for p in MSBUILD_PATHS if os.path.exists(p)), None)
+
+def run_ps(cmd, timeout_s=30):
+    msbuild = find_msbuild()
+    if not msbuild:
+        return False, "MSBuild no encontrado"
+
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w")
+    tmp_out.close()
+    out_path = tmp_out.name.replace("\\", "\\\\")
+
+    ps_esc = cmd.strip()
+    ps_esc = ps_esc.replace("\\", "\\\\")
+    ps_esc = ps_esc.replace('"', '\\"')
+    ps_esc = ps_esc.replace("\r\n", "\\n")
+    ps_esc = ps_esc.replace("\n", "\\n")
+    ps_esc = ps_esc.replace("\r", "\\n")
+
+    xml = f"""<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="Run"><ShellTask /></Target>
+  <UsingTask TaskName="ShellTask" TaskFactory="CodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\\Microsoft.Build.Tasks.v4.0.dll">
+    <Task>
+      <Reference Include="System.Management.Automation" />
+      <Code Type="Class" Language="cs"><![CDATA[
+        using Microsoft.Build.Framework;
+        using Microsoft.Build.Utilities;
+        using System.Management.Automation;
+        using System.Management.Automation.Runspaces;
+        using System.Text;
+        using System.IO;
+        public class ShellTask : Task {{
+          public override bool Execute() {{
+            var sb  = new StringBuilder();
+            var err = new StringBuilder();
+            try {{
+              using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
+                rs.Open();
+                using (Pipeline p = rs.CreatePipeline()) {{
+                  p.Commands.AddScript("{ps_esc}");
+                  p.Commands.Add("Out-String");
+                  foreach (var r in p.Invoke()) sb.Append(r.ToString());
+                  if (p.Error.Count > 0)
+                    foreach (var e in p.Error.ReadToEnd())
+                      err.AppendLine(e.ToString());
+                }}
+              }}
+            }} catch (System.Exception ex) {{
+              err.AppendLine(ex.Message);
+            }}
+            var out2 = sb.ToString();
+            if (err.Length > 0) out2 += "\\nERROR_STREAM:\\n" + err.ToString();
+            File.WriteAllText("{out_path}", out2, Encoding.UTF8);
+            return true;
+          }}
+        }}
+      ]]></Code>
+    </Task>
+  </UsingTask>
+</Project>"""
+
+    proj = tempfile.NamedTemporaryFile(suffix=".proj", delete=False,
+                                       mode="w", encoding="utf-8")
+    proj.write(xml)
+    proj.close()
+
+    try:
+        r = subprocess.run(
+            [msbuild, proj.name, "/nologo", "/verbosity:quiet"],
+            capture_output=True, text=True, timeout=timeout_s,
+            shell=False, encoding="utf-8", errors="replace"
+        )
+        result = ""
+        try:
+            result = Path(tmp_out.name).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+        if r.returncode != 0 and not result.strip():
+            err = (r.stdout + r.stderr).strip()
+            return False, err[:400]
+
+        return True, result
+    except subprocess.TimeoutExpired:
+        return False, "TIMEOUT"
+    except Exception as e:
+        return False, str(e)
+    finally:
+        try: os.unlink(proj.name)
+        except: pass
+        try: os.unlink(tmp_out.name)
+        except: pass
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+def get_pwd():
+    ok, out = run_ps("(Get-Location).Path")
+    if ok and out.strip():
+        return out.strip().splitlines()[0].strip()
+    return os.environ.get("USERPROFILE", "C:\\")
+
+def spinning_wait():
+    frames = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
+    i = 0
+    while True:
+        yield frames[i % len(frames)]
+        i += 1
+
+def print_output(text):
+    if not text.strip():
+        return
+    if "ERROR_STREAM:\n" in text:
+        parts = text.split("ERROR_STREAM:\n", 1)
+        normal = parts[0].rstrip("\n")
+        errors = parts[1].strip()
+        if normal.strip():
+            print(c(WHITE, normal))
+        if errors:
+            for line in errors.splitlines():
+                print(c(RED, f"  {line}"))
+    else:
+        print(c(WHITE, text.rstrip("\n")))
+
+def prompt_str(pwd):
+    return f"{c(CYAN, 'PS')} {c(WHITE, pwd)}{c(CYAN, '>')} "
+
+# ── CD tracking ───────────────────────────────────────────────────────────────
+import re
+
+CD_PATTERN = re.compile(
+    r"^\s*(?:Set-Location|cd|sl|chdir|Push-Location|pushd)\s+(.+)$",
+    re.IGNORECASE
+)
+
+def maybe_update_pwd(cmd, current_pwd):
+    m = CD_PATTERN.match(cmd)
+    if not m:
+        return current_pwd
+    target = m.group(1).strip().strip("'\"")
+    full_cmd = f"Set-Location '{target}'; (Get-Location).Path"
+    ok, out = run_ps(full_cmd)
+    if ok and out.strip():
+        new_path = out.strip().splitlines()[0].strip()
+        if new_path and not new_path.startswith("ERROR"):
+            return new_path
+    return current_pwd
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+BANNER = f"""
+{c(WHITE, 'Windows PowerShell')}
+{c(GRAY,  'Copyright (C) Microsoft Corporation. Todos los derechos reservados.')}
+
+{c(DIM+GRAY, 'Engine: MSBuild.exe + C# Runspace (sin powershell.exe)')}
+{c(DIM+GRAY, 'Nota  : variables no persisten entre comandos (~5s/cmd)')}
+"""
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+def main():
+    if sys.platform != "win32":
+        print("ABORTAR: requiere Windows")
+        return
+
+    enable_ansi()
+
+    msbuild = find_msbuild()
+    if not msbuild:
+        print(c(RED, "ERROR: MSBuild.exe no encontrado"))
+        input("Enter para salir...")
+        return
+
+    print(BANNER)
+
+    print(c(GRAY, "  Obteniendo directorio actual..."), end="\r")
+    current_pwd = get_pwd()
+    print(" " * 40, end="\r")
+
+    spinner = spinning_wait()
+
+    while True:
+        try:
+            line = input(prompt_str(current_pwd))
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+
+        cmd = line.strip()
+        if not cmd:
+            continue
+
+        cmd_lower = cmd.lower()
+
+        if cmd_lower in ("exit", "quit", "q"):
+            break
+
+        if cmd_lower in ("cls", "clear"):
+            os.system("cls" if sys.platform == "win32" else "clear")
+            continue
+
+        if cmd_lower == "help":
+            print(c(CYAN,   "\n  Comandos especiales:"))
+            print(c(WHITE,  "    cls / clear  — limpiar pantalla"))
+            print(c(WHITE,  "    exit / quit  — salir"))
+            print(c(GRAY,   "\n  Cualquier otro comando se ejecuta como PowerShell via MSBuild."))
+            print(c(YELLOW, "  Limitacion: variables no persisten entre comandos.\n"))
+            continue
+
+        # Mostrar spinner mientras ejecuta
+        print(c(GRAY, f"  {next(spinner)} ejecutando..."), end="\r", flush=True)
+        t0 = time.time()
+        ok, output = run_ps(cmd)
+        elapsed = time.time() - t0
+        print(" " * 30, end="\r")
+
+        if ok:
+            print_output(output)
+            if elapsed > 2.0:
+                print(c(GRAY, f"  [{elapsed:.1f}s]"))
+        else:
+            if output:
+                print(c(RED, f"  Error: {output}"))
+            else:
+                print(c(YELLOW, "  (sin output)"))
+            print(c(GRAY, f"  [{elapsed:.1f}s]"))
+
+        # Actualizar PWD si fue un cd
+        if CD_PATTERN.match(cmd):
+            print(c(GRAY, f"  {next(spinner)} actualizando ruta..."), end="\r", flush=True)
+            new_pwd = maybe_update_pwd(cmd, current_pwd)
+            print(" " * 30, end="\r")
+            if new_pwd != current_pwd:
+                current_pwd = new_pwd
+
+    print(c(GRAY, "\nSesion terminada.\n"))
+
+if __name__ == "__main__":
+    main()
