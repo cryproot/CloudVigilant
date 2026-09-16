@@ -85,6 +85,12 @@ if (Test-Path '{sp}') {{
     }}
   }} catch {{}}
 }}
+if (Test-Path '{pp}') {{
+  try {{
+    $__pwd = (Get-Content '{pp}' -Raw -EA SilentlyContinue).Trim().TrimStart([char]0xFEFF)
+    if ($__pwd) {{ Set-Location $__pwd -EA SilentlyContinue }}
+  }} catch {{}}
+}}
 """
 
 def _state_dump(sp, pp):
@@ -211,6 +217,8 @@ def _stream_reader(out_file, stop_evt):
     except Exception:
         pass
 
+_last_char = ['\n']  # mutable so closures can update it
+
 def _write_chunk(text):
     parts = []
     for line in text.split('\n'):
@@ -219,7 +227,10 @@ def _write_chunk(text):
             parts.append(c(RED, f'  {msg}') if msg.strip() else '')
         else:
             parts.append(c(WHITE, line))
-    sys.stdout.write('\n'.join(parts))
+    result = '\n'.join(parts)
+    if result:
+        sys.stdout.write(result)
+        _last_char[0] = result[-1]
     sys.stdout.flush()
 
 # ── Core runner ────────────────────────────────────────────────────────────────
@@ -427,7 +438,7 @@ def get_input(prompt_str, history):
         elif ch == '\x15':                          # Ctrl+U — borrar hasta el inicio
             del buf[:pos]; pos = 0; redraw()
         elif ch == '\x0c':                          # Ctrl+L — limpiar pantalla
-            os.system('cls')
+            sys.stdout.write("\033[2J\033[H")
             sys.stdout.write(prompt_str + ''.join(buf))
             d = len(buf) - pos
             if d: sys.stdout.write(f'\033[{d}D')
@@ -444,7 +455,8 @@ def read_pwd():
     try:
         p = Path(_sess("pwd.txt"))
         if p.exists():
-            return p.read_text(encoding='utf-8').strip()
+            # utf-8-sig strips BOM que PS 5.x añade con Set-Content -Encoding UTF8
+            return p.read_text(encoding='utf-8-sig').strip()
     except Exception:
         pass
     return os.environ.get("USERPROFILE", "C:\\")
@@ -483,12 +495,14 @@ def main():
     history   = load_history(hist_path)
 
     print(BANNER)
-    print(c(GRAY, "  Iniciando sesion..."), end="\r")
 
-    # Obtener pwd inicial via MSBuild
-    pwd0 = run_ps_silent("(Get-Location).Path")
-    current_pwd = pwd0 if pwd0 else os.environ.get("USERPROFILE", "C:\\")
-    print(" " * 30, end="\r")
+    # Inicializar pwd.txt con el directorio actual de Python (no el de MSBuild/TEMP)
+    init_pwd = os.getcwd()
+    try:
+        Path(_sess("pwd.txt")).write_text(init_pwd, encoding='utf-8')
+    except Exception:
+        pass
+    current_pwd = init_pwd
 
     while True:
         # Leer la linea (con soporte multilinea)
@@ -508,7 +522,7 @@ def main():
         if cmd_l in ("exit", "quit", "q"):
             break
         if cmd_l in ("cls", "clear"):
-            os.system("cls"); continue
+            sys.stdout.write("\033[2J\033[H"); sys.stdout.flush(); continue
         if cmd_l == "help":
             print(c(CYAN, "\n  Atajos de teclado:"))
             for k, v in [("↑ / ↓", "navegar historial"),
@@ -542,11 +556,17 @@ def main():
         append_history(full_cmd, hist_path)
 
         # Ejecutar
+        _last_char[0] = '\n'
         t0 = time.time()
         run_ps(full_cmd, timeout_s=120, with_state=True, stream=True)
         elapsed = time.time() - t0
 
-        # Actualizar prompt con nuevo pwd
+        # Asegurar que el output termina en su propia linea
+        if _last_char[0] != '\n':
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
+        # Actualizar prompt con nuevo pwd (sin BOM)
         new_pwd = read_pwd()
         if new_pwd:
             current_pwd = new_pwd
