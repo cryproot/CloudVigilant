@@ -127,9 +127,10 @@ def _esc(s):
     return s
 
 # ── C# template ────────────────────────────────────────────────────────────────
-def _build_xml(ps_esc, out_path, streaming=True):
-    # streaming=True  → PowerShell class (tiene BeginInvoke/EndInvoke + DataAdded)
-    # streaming=False → Pipeline class  (Invoke sincrono, probado y funciona)
+def _build_xml(ps_esc, out_path, streaming=True, width=200):
+    # streaming=True  → PowerShell class (BeginInvoke + DataAdded para output incremental)
+    # streaming=False → Pipeline class  (Invoke sincrono, probado)
+    # width → ancho real del terminal, pasado a Out-String -Width para formateo correcto
     if streaming:
         cs_body = f"""
               using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
@@ -137,7 +138,9 @@ def _build_xml(ps_esc, out_path, streaming=True):
                 using (var ps = PowerShell.Create()) {{
                   ps.Runspace = rs;
                   ps.AddScript("{ps_esc}");
-                  ps.AddCommand("Out-String").AddParameter("Stream", true);
+                  ps.AddCommand("Out-String")
+                    .AddParameter("Stream", true)
+                    .AddParameter("Width", {width});
                   var output = new PSDataCollection<PSObject>();
                   output.DataAdded += (s, ev) => {{
                     var obj = ((PSDataCollection<PSObject>)s)[ev.Index];
@@ -154,7 +157,9 @@ def _build_xml(ps_esc, out_path, streaming=True):
                 rs.Open();
                 using (Pipeline p = rs.CreatePipeline()) {{
                   p.Commands.AddScript("{ps_esc}");
-                  p.Commands.Add("Out-String");
+                  var osCmd = new Command("Out-String");
+                  osCmd.Parameters.Add("Width", {width});
+                  p.Commands.Add(osCmd);
                   foreach (var r2 in p.Invoke()) if (r2 != null) w.Write(r2.ToString());
                   if (p.Error.Count > 0)
                     foreach (var e in p.Error.ReadToEnd())
@@ -249,7 +254,12 @@ def run_ps(script, timeout_s=60, with_state=True, stream=True):
     else:
         full_ps = script
 
-    xml  = _build_xml(_esc(full_ps), op, streaming=stream)
+    try:
+        import shutil
+        tw = shutil.get_terminal_size((200, 50)).columns
+    except Exception:
+        tw = 200
+    xml  = _build_xml(_esc(full_ps), op, streaming=stream, width=tw)
     proj = tempfile.NamedTemporaryFile(suffix=".proj", delete=False,
                                        mode="w", encoding="utf-8")
     proj.write(xml)
