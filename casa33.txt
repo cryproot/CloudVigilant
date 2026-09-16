@@ -144,10 +144,7 @@ def _build_xml(ps_esc, out_path, streaming=True, width=200):
                   var output = new PSDataCollection<PSObject>();
                   output.DataAdded += (s, ev) => {{
                     var obj = ((PSDataCollection<PSObject>)s)[ev.Index];
-                    if (obj != null) {{
-                      var line = obj.ToString().TrimEnd('\r', '\n');
-                      w.WriteLine(line);
-                    }}
+                    if (obj != null) w.WriteLine(obj.ToString());
                   }};
                   ps.EndInvoke(ps.BeginInvoke<PSObject, PSObject>(null, output));
                   foreach (var e in ps.Streams.Error)
@@ -228,6 +225,7 @@ def _stream_reader(out_file, stop_evt):
 _last_char = ['\n']  # mutable so closures can update it
 
 def _write_chunk(text):
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
     parts = []
     for line in text.split('\n'):
         if line.startswith('__ERR__'):
