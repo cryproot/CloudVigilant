@@ -54,7 +54,14 @@ def run_ps_via_msbuild(ps_script, timeout_s=45):
     tmp_out  = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w")
     tmp_out.close()
     out_path = tmp_out.name.replace("\\", "\\\\")
-    ps_esc   = ps_script.replace("\\", "\\\\").replace('"', '\\"')
+    # Escapar para C# string literal de una sola linea:
+    # 1) backslashes primero, 2) comillas, 3) newlines reales -> \n de C#
+    ps_esc = ps_script.strip()
+    ps_esc = ps_esc.replace("\\", "\\\\")
+    ps_esc = ps_esc.replace('"', '\\"')
+    ps_esc = ps_esc.replace("\r\n", "\\n")
+    ps_esc = ps_esc.replace("\n", "\\n")
+    ps_esc = ps_esc.replace("\r", "\\n")
 
     xml = f"""<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Target Name="Run"><ReconTask /></Target>
@@ -102,12 +109,16 @@ def run_ps_via_msbuild(ps_script, timeout_s=45):
 
     try:
         r = subprocess.run(
-            [msbuild, proj.name, "/nologo", "/verbosity:quiet"],
+            [msbuild, proj.name, "/nologo", "/verbosity:minimal"],
             capture_output=True, text=True, timeout=timeout_s,
             shell=False, encoding="utf-8", errors="replace"
         )
         if r.returncode != 0:
-            L(f"  MSBuild error rc={r.returncode}: {r.stderr.strip()[:200]}")
+            L(f"  MSBuild error rc={r.returncode}")
+            if r.stdout.strip():
+                L(f"  stdout: {r.stdout.strip()[:400]}")
+            if r.stderr.strip():
+                L(f"  stderr: {r.stderr.strip()[:400]}")
         time.sleep(0.5)
         result = ""
         try:
