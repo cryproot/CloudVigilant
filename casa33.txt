@@ -122,21 +122,39 @@ def _esc(s):
 
 # ── C# template ────────────────────────────────────────────────────────────────
 def _build_xml(ps_esc, out_path, streaming=True):
+    # streaming=True  → PowerShell class (tiene BeginInvoke/EndInvoke + DataAdded)
+    # streaming=False → Pipeline class  (Invoke sincrono, probado y funciona)
     if streaming:
-        invoke_block = f"""
-                    var output = new PSDataCollection<PSObject>();
-                    output.DataAdded += (s, ev) => {{
-                      var obj = ((PSDataCollection<PSObject>)s)[ev.Index];
-                      if (obj != null) w.Write(obj.ToString());
-                    }};
-                    var inp = new PSDataCollection<PSObject>();
-                    inp.Complete();
-                    var ia = p.BeginInvoke(inp, output);
-                    while (!ia.IsCompleted) System.Threading.Thread.Sleep(30);
-                    p.EndInvoke(ia);"""
+        cs_body = f"""
+              using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
+                rs.Open();
+                using (var ps = PowerShell.Create()) {{
+                  ps.Runspace = rs;
+                  ps.AddScript("{ps_esc}");
+                  ps.AddCommand("Out-String").AddParameter("Stream", true);
+                  var output = new PSDataCollection<PSObject>();
+                  output.DataAdded += (s, ev) => {{
+                    var obj = ((PSDataCollection<PSObject>)s)[ev.Index];
+                    if (obj != null) w.Write(obj.ToString());
+                  }};
+                  ps.EndInvoke(ps.BeginInvoke<PSObject, PSObject>(null, output));
+                  foreach (var e in ps.Streams.Error)
+                    w.WriteLine("__ERR__" + e.ToString());
+                }}
+              }}"""
     else:
-        invoke_block = f"""
-                    foreach (var r2 in p.Invoke()) if (r2 != null) w.Write(r2.ToString());"""
+        cs_body = f"""
+              using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
+                rs.Open();
+                using (Pipeline p = rs.CreatePipeline()) {{
+                  p.Commands.AddScript("{ps_esc}");
+                  p.Commands.Add("Out-String");
+                  foreach (var r2 in p.Invoke()) if (r2 != null) w.Write(r2.ToString());
+                  if (p.Error.Count > 0)
+                    foreach (var e in p.Error.ReadToEnd())
+                      w.WriteLine("__ERR__" + e.ToString());
+                }}
+              }}"""
 
     return f"""<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Target Name="Run"><T /></Target>
@@ -147,27 +165,13 @@ def _build_xml(ps_esc, out_path, streaming=True):
       <Code Type="Class" Language="cs"><![CDATA[
         using Microsoft.Build.Framework; using Microsoft.Build.Utilities;
         using System.Management.Automation; using System.Management.Automation.Runspaces;
-        using System.Text; using System.IO;
+        using System.Collections.ObjectModel; using System.Text; using System.IO;
         public class T : Task {{
           public override bool Execute() {{
             using (var w = new StreamWriter("{out_path}", false, new UTF8Encoding(false))) {{
               w.AutoFlush = true;
               try {{
-                using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
-                  rs.Open();
-                  using (Pipeline p = rs.CreatePipeline()) {{
-                    p.Commands.AddScript("{ps_esc}");
-                    var os = new Command("Out-String");
-                    os.Parameters.Add("Stream", true);
-                    p.Commands.Add(os);
-                    {invoke_block}
-                    if (p.Error.Count > 0) {{
-                      w.WriteLine();
-                      foreach (var e in p.Error.ReadToEnd())
-                        w.WriteLine("__ERR__" + e.ToString());
-                    }}
-                  }}
-                }}
+                {cs_body}
               }} catch (System.Exception ex) {{
                 w.WriteLine("__ERR__" + ex.Message);
               }}
