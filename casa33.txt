@@ -377,12 +377,37 @@ def get_input(prompt_str, history):
     saved    = []
 
     def redraw():
-        line = ''.join(buf)
-        end  = pw + len(buf)
-        cur  = pw + pos
-        sys.stdout.write(f'\r{prompt_str}{line}  \r{prompt_str}')
-        if pos > 0:
-            sys.stdout.write(''.join(buf[:pos]))
+        try:
+            import shutil
+            tw = shutil.get_terminal_size((80, 24)).columns
+        except Exception:
+            tw = 80
+
+        to_cursor = pw + pos          # chars visibles desde col-0 hasta el cursor
+        to_end    = pw + len(buf)     # chars visibles desde col-0 hasta el final
+
+        # Subir hasta la linea donde empieza el prompt
+        lines_above = to_cursor // tw
+        if lines_above > 0:
+            sys.stdout.write(f'\033[{lines_above}A')
+        # Col 0 + limpiar hasta el final de pantalla
+        sys.stdout.write('\r\033[J')
+
+        # Reimprimir prompt + buffer completo
+        sys.stdout.write(prompt_str + ''.join(buf))
+
+        # Reposicionar cursor si no esta al final
+        if pos < len(buf):
+            end_line = to_end    // tw
+            cur_line = to_cursor // tw
+            diff     = end_line - cur_line
+            if diff > 0:
+                sys.stdout.write(f'\033[{diff}A')
+            col = to_cursor % tw
+            sys.stdout.write('\r')
+            if col > 0:
+                sys.stdout.write(f'\033[{col}C')
+
         sys.stdout.flush()
 
     while True:
