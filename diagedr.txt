@@ -1,0 +1,75 @@
+"""
+diag_edr.py — Diagnostico de que paso dispara la alerta EDR al inicio
+Ejecuta y observa en que PASO aparece el popup de CrowdStrike.
+Presiona Enter para avanzar al siguiente paso.
+"""
+import sys, os, time
+
+def paso(n, desc):
+    input(f"\n[PASO {n}] {desc}\n         Presiona Enter para ejecutar...")
+    time.sleep(0.3)
+
+print("=== DIAGNOSTICO EDR ===")
+print("Cada paso hace UNA accion. Presiona Enter para avanzar.")
+print("Anota en que PASO aparece el popup de CrowdStrike.\n")
+input("Listo? Presiona Enter para comenzar...")
+
+# ── PASO 1: import ctypes ─────────────────────────────────────────────────────
+paso(1, "import ctypes")
+import ctypes
+print("  OK — ctypes importado")
+
+# ── PASO 2: acceder kernel32 via ctypes ──────────────────────────────────────
+paso(2, "ctypes.windll.kernel32  (acceder kernel32)")
+k32 = ctypes.windll.kernel32
+print("  OK — kernel32 accedido")
+
+# ── PASO 3: GetStdHandle (handle de consola) ──────────────────────────────────
+paso(3, "kernel32.GetStdHandle(-11)  [STD_OUTPUT_HANDLE]")
+h = k32.GetStdHandle(-11)
+print(f"  OK — handle={h}")
+
+# ── PASO 4: GetConsoleMode ────────────────────────────────────────────────────
+paso(4, "kernel32.GetConsoleMode  (leer modo actual de consola)")
+m = ctypes.c_ulong()
+k32.GetConsoleMode(h, ctypes.byref(m))
+print(f"  OK — modo actual={m.value}")
+
+# ── PASO 5: SetConsoleMode (ENABLE_VIRTUAL_TERMINAL_PROCESSING) ───────────────
+paso(5, "kernel32.SetConsoleMode  (habilitar ANSI — 0x0004)")
+k32.SetConsoleMode(h, m.value | 0x0004)
+print("  OK — ANSI habilitado")
+
+# ── PASO 6: os.path.exists en rutas de sistema ───────────────────────────────
+paso(6, "os.path.exists en rutas de MSBuild (reconocimiento de binarios)")
+rutas = [
+    r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe",
+    r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe",
+    r"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+]
+for r in rutas:
+    existe = os.path.exists(r)
+    print(f"  {r[-40:]:40s} → {'SI' if existe else 'no'}")
+
+# ── PASO 7: os.makedirs en %TEMP% ────────────────────────────────────────────
+paso(7, "os.makedirs en %TEMP%\\pssess  (crear directorio en TEMP)")
+import tempfile
+sess_dir = os.path.join(tempfile.gettempdir(), "pssess")
+os.makedirs(sess_dir, exist_ok=True)
+print(f"  OK — directorio creado: {sess_dir}")
+
+# ── PASO 8: escribir archivo en %TEMP%\pssess ─────────────────────────────────
+paso(8, "escribir archivo pwd.txt en el directorio de sesion")
+from pathlib import Path
+Path(sess_dir, "pwd.txt").write_text(os.getcwd(), encoding='utf-8')
+print(f"  OK — pwd.txt escrito")
+
+# ── PASO 9: import subprocess, threading ─────────────────────────────────────
+paso(9, "import subprocess, threading, signal")
+import subprocess, threading, signal
+print("  OK — modulos importados")
+
+print("\n=== FIN DEL DIAGNOSTICO ===")
+print(f"Si llegaste hasta aqui sin alerta, el trigger es otro.")
+print(f"Anota el numero del PASO donde aparecio el popup.")
+input("\nEnter para cerrar...")
